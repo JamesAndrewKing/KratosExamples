@@ -35,14 +35,14 @@ Two snapshots of the pressure coefficient ($C_p$) are shown below: one depicting
 Figure 2 presents the pressure coefficient ($C_p$) distribution along the chord of the airfoil.
 
 <p align="center">
-  <img src="data/Airfoils_Cp_x.png" alt="Pressure coefficient distribution along the airfoil chord." style="width: 600px;"/>
+  <img src="data/Cp_distribution_x.png" alt="Pressure coefficient distribution along the airfoil chord." style="width: 600px;"/>
   <figcaption align="center"> Figure 2: Pressure coefficient ($C_p$) distribution along the chord of the NACA 0012 airfoil. </figcaption>
 </p>
 
 Figure 3 shows the spatial distribution of the pressure coefficient over the entire computational domain.
 
 <p align="center">
-  <img src="data/Airfoils_Cp_distributions.png" alt="Pressure coefficient distribution around the NACA 0012 airfoil." style="width: 600px;"/>
+  <img src="data/Cp_distribution_airfoil.png" alt="Pressure coefficient distribution around the NACA 0012 airfoil." style="width: 600px;"/>
   <figcaption align="center"> Figure 3: Pressure coefficient ($C_p$) distribution in the computational domain around the NACA 0012 airfoil. </figcaption>
 </p>
 
