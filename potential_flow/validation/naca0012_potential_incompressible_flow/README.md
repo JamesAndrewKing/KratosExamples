@@ -55,5 +55,6 @@ The aerodynamic coefficients obtained from the simulation can be compared with r
 
 For an angle of attack of $\alpha = 5^\circ$, the computed lift coefficient is $C_l = 0.569$. This result shows very good agreement with the reference data presented in Figure 4, which is used here for validation purposes.
 
-
+## References
+(1) [https://aerospaceweb.org/question/airfoils/q0259c.shtml] (https://aerospaceweb.org/question/airfoils/q0259c.shtml)
 
