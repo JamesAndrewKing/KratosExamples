@@ -1,0 +1,138 @@
+{
+  "problem_data": {
+    "problem_name": "laplacian_3d_stanford_bunny",
+    "echo_level": 1,
+    "parallel_type": "OpenMP",
+    "start_time": 0.0,
+    "end_time": 1.0
+  },
+  "solver_settings": {
+    "solver_type": "stationary",
+    "analysis_type": "non_linear",
+    "model_part_name": "IgaModelPart",
+    "domain_size": 3,
+    "model_import_settings": {
+      "input_type": "use_input_model_part"
+    },
+    "material_import_settings": {
+      "materials_filename": "materials.json"
+    },
+    "linear_solver_settings": {
+      "solver_type": "skyline_lu_factorization"
+    },
+    "skip_entities_replace_and_check": true,
+    "line_search": false,
+    "echo_level": 1,
+    "compute_reactions": false,
+    "max_iteration": 3,
+    "solution_relative_tolerance": 1e-14,
+    "solution_absolute_tolerance": 1e-14,
+    "residual_relative_tolerance": 1e-14,
+    "residual_absolute_tolerance": 1e-14,
+    "time_stepping": {
+      "time_step": 1e20
+    }
+  },
+  "modelers": [
+    {
+      "modeler_name": "import_mdpa_modeler",
+      "kratos_module": "KratosMultiphysics",
+      "Parameters": {
+        "input_filename": "bunny",
+        "model_part_name": "initial_skin_model_part_out"
+      }
+    },
+    {
+      "modeler_name": "NurbsGeometryModelerSbm",
+      "Parameters": {
+        "model_part_name": "IgaModelPart",
+        "lower_point_xyz": [0.0, 0.0, 0.0],
+        "upper_point_xyz": [2.0, 2.0, 2.0],
+        "lower_point_uvw": [0.0, 0.0, 0.0],
+        "upper_point_uvw": [2.0, 2.0, 2.0],
+        "polynomial_order": [2, 2, 2],
+        "number_of_knot_spans": [40, 40, 40],
+        "lambda_outer": 1.0,
+        "lambda_inner": 0.5,
+        "number_of_inner_loops": 0,
+        "skin_model_part_outer_initial_name": "initial_skin_model_part_out",
+        "skin_model_part_name": "skin_model_part"
+      }
+    },
+    {
+      "modeler_name": "IgaModelerSbm",
+      "Parameters": {
+        "echo_level": 0,
+        "skin_model_part_name": "skin_model_part",
+        "analysis_model_part_name": "IgaModelPart",
+        "element_condition_list": [
+          {
+            "geometry_type": "GeometryVolume",
+            "iga_model_part": "ConvectionDiffusionDomain",
+            "type": "element",
+            "name": "LaplacianElement",
+            "shape_function_derivatives_order": 2
+          },
+          {
+            "geometry_type": "SurfaceEdge",
+            "iga_model_part": "SBM_Support_outer",
+            "type": "condition",
+            "name": "SbmLaplacianConditionDirichlet",
+            "shape_function_derivatives_order": 10,
+            "sbm_parameters": {
+              "is_inner": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "processes": {
+    "additional_processes": [
+      {
+        "python_module": "assign_iga_external_conditions_process",
+        "kratos_module": "KratosMultiphysics.IgaApplication",
+        "process_name": "AssignIgaExternalConditionsProcess",
+        "Parameters": {
+          "echo_level": 0,
+          "model_part_name": "IgaModelPart",
+          "element_condition_list": [
+            {
+              "iga_model_part": "IgaModelPart.ConvectionDiffusionDomain",
+              "variables": [
+                {
+                  "variable_name": "HEAT_FLUX",
+                  "value": "sin(x) * sinh(y) * cos(z)"
+                }
+              ]
+            },
+            {
+              "iga_model_part": "IgaModelPart.SBM_Support_outer",
+              "variables": [
+                {
+                  "variable_name": "TEMPERATURE",
+                  "value": "sin(x) * sinh(y) * cos(z)"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "dirichlet_process_list": [
+      {
+        "kratos_module": "KratosMultiphysics",
+        "python_module": "assign_scalar_variable_to_nodes_process",
+        "Parameters": {
+          "model_part_name": "skin_model_part.outer",
+          "variable_name": "TEMPERATURE",
+          "value": "sin(x) * sinh(y) * cos(z)"
+        }
+      }
+    ],
+    "constraints_process_list": []
+  },
+  "output_processes": {
+    "output_process_list": []
+  }
+}
