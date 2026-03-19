@@ -10,7 +10,7 @@ from KratosMultiphysics.ConvectionDiffusionApplication.convection_diffusion_anal
 )
 
 
-INSERTION_COUNTS = [15, 20, 25, 30, 35, 40, 50]
+INSERTION_COUNTS = [20, 25, 30, 35, 40, 45, 50]
 POLYNOMIAL_ORDER = 2
 DOMAIN_LENGTH = 2.0
 
