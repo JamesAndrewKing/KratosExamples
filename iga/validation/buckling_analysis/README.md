@@ -8,7 +8,7 @@
 
 ## Problem definition
 
-This example presents the validation of buckling analysis in Kratos with IGA element.
+This example presents the validation of buckling analysis in Kratos with Isogeometric Analysis.
 
 ![Reference Model](data/Reference_Model.png)
 
