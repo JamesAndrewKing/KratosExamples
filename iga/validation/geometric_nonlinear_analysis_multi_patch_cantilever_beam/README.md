@@ -1,18 +1,20 @@
-# Cantilever Beam - Multi Patch - Geometric Non-Linear Analysis
+# Geometric Non-Linear Analysis - Multi Patch - Cantilever Beam
 
 **Author:** Aakash Ravichandran
 
 **Kratos version:** 10.4
 
-**Source files:** [Cantilever Beam - Multi Patch - Geometric Non-Linear Analysis](https://github.com/KratosMultiphysics/Examples/tree/master/iga/validation/cantilever_beam_multi_patch_non_linear/source)
+**Source files:** [Geometric Non-Linear Analysis - Multi Patch - Cantilever Beam](https://github.com/KratosMultiphysics/Examples/tree/master/iga/validation/cantilever_beam_multi_patch_non_linear/source)
 
 ## Problem definition
 
 This example presents the validation of geometric non-linear analysis of a cantilever beam subjected to a end shear force [1].
 
-![Reference Model](data/Reference_Model.png)
+<div align="center">
+<img src="data/Reference_Model.png" alt="Displacement" width="600">
 
 *Structural System [1]*
+</div>
 
 
 The cantilever beam is modeled using two connected NURBS patches with the Shell3pElement. The CAD model of both the patches is constructed with single span B-spline surfaces. The first patch has an curve degree of 2 in both axes and the second patch has an curve degree of 3 in the longitudinal direction and 2 in the transverse direction. Additional refinement is applied in Kratos by increasing the curve degree by 1 in both directions for both patches. Furthermore, h-refinement is applied by inserting 4 knots longitudinally and 3 knots transversely in the first patch, alongside 12 knots longitudinally and 4 knots transversely in the second patch. Hence on the edge where two surfaces gets connected, in the first patch number of elements is 4 and in 2nd patch the number of elements is 5. Therefore they are nonconforming patches. 
@@ -21,11 +23,20 @@ The cantilever beam is modeled using two connected NURBS patches with the Shell3
 
 The load-displacement curve obtained at the free end is shown in [figure](data/LoadStep_vs_Displacement_XZ.png). This shows a good agreement with the reference [1] - Figure 2a and Table 2. 
 
-![Displacement](data/Model.png)
+<div align="center">
+<img src="data/Model.png" alt="Displacement" width="600">
+
+*Displacement Result*
+</div>
+
+
+<div align="center">
 
 | Reference Force vs Displacement [1] | Force vs Displacement - From Kratos |
 | :---: | :---: |
-| ![Reference Force vs Displacement](data/Reference_LoadStep_vs_Displacement_XZ.png) | ![Kratos Force vs Displacement](data/LoadStep_vs_Displacement_XZ.png) |
+| <img src="data/Reference_LoadStep_vs_Displacement_XZ.png" height="400"> | <img src="data/LoadStep_vs_Displacement_XZ.png" height="400"> |
+
+</div>
 
 
 
