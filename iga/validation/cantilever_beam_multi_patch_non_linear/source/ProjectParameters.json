@@ -53,7 +53,7 @@
                 "echo_level": 0,
                 "cad_model_part_name": "IgaModelPart",
                 "geometry_file_name": "geometry.cad.json",
-                "output_geometry_file_name": "Cantilever_beam_geometric_nonlinear_analysis_0.georhino.json"
+                "output_geometry_file_name": "Cantilever_beam_geometric_nonlinear_analysis_kratos_0.georhino.json"
             }
         },
         {
@@ -79,7 +79,7 @@
                 "kratos_module": "IgaApplication",
                 "python_module": "output_quadrature_domain_process",
                 "Parameters": {
-                    "output_file_name": "Cantilever_beam_geometric_nonlinear_analysis_shell_1_integrationdomain.json",
+                    "output_file_name": "Cantilever_beam_geometric_nonlinear_analysis_kratos_shell_1_integrationdomain.json",
                     "model_part_name": "IgaModelPart.StructuralAnalysis_1",
                     "output_geometry_elements": true,
                     "output_geometry_conditions": false
@@ -89,7 +89,7 @@
                 "kratos_module": "IgaApplication",
                 "python_module": "output_quadrature_domain_process",
                 "Parameters": {
-                    "output_file_name": "Cantilever_beam_geometric_nonlinear_analysis_support_2_integrationdomain.json",
+                    "output_file_name": "Cantilever_beam_geometric_nonlinear_analysis_kratos_support_2_integrationdomain.json",
                     "model_part_name": "IgaModelPart.Support_2",
                     "output_geometry_elements": false,
                     "output_geometry_conditions": true
@@ -99,7 +99,7 @@
                 "kratos_module": "IgaApplication",
                 "python_module": "output_quadrature_domain_process",
                 "Parameters": {
-                    "output_file_name": "Cantilever_beam_geometric_nonlinear_analysis_coupling_4_integrationdomain.json",
+                    "output_file_name": "Cantilever_beam_geometric_nonlinear_analysis_kratos_coupling_4_integrationdomain.json",
                     "model_part_name": "IgaModelPart.Coupling_4",
                     "output_geometry_elements": false,
                     "output_geometry_conditions": false,
@@ -211,7 +211,7 @@
                         "PK2_STRESS",
                         "INTERNAL_MOMENT"
                     ],
-                    "output_file_name": "Cantilever_beam_geometric_nonlinear_analysis_shell_1.post.res",
+                    "output_file_name": "Cantilever_beam_geometric_nonlinear_analysis_kratos_shell_1.post.res",
                     "model_part_name": "IgaModelPart.StructuralAnalysis_1",
                     "file_label": "step",
                     "output_control_type": "time",
@@ -226,7 +226,7 @@
                     "integration_point_results": [
                         "REACTION"
                     ],
-                    "output_file_name": "Cantilever_beam_geometric_nonlinear_analysis_support_2.post.res",
+                    "output_file_name": "Cantilever_beam_geometric_nonlinear_analysis_kratos_support_2.post.res",
                     "model_part_name": "IgaModelPart.Support_2",
                     "file_label": "step",
                     "output_control_type": "time",
@@ -239,7 +239,7 @@
                 "Parameters": {
                     "nodal_results": [],
                     "integration_point_results": [],
-                    "output_file_name": "Cantilever_beam_geometric_nonlinear_analysis_coupling_4.post.res",
+                    "output_file_name": "Cantilever_beam_geometric_nonlinear_analysis_kratos_coupling_4.post.res",
                     "model_part_name": "IgaModelPart.Coupling_4",
                     "file_label": "step",
                     "output_control_type": "time",
