@@ -12,8 +12,8 @@ The Examples are continuously updated and extended
 - [3D Laplacian on an Embedded Cube with SBM](https://github.com/KratosMultiphysics/Examples/blob/master/iga/use_cases/laplacian_3d_cube_sbm/README.md)
 
 ## Validation Cases
-- [Buckling Analysis](https://github.com/KratosMultiphysics/Examples/blob/master/iga/validation/buckling_analysis_single_patch_cantilever_beam/README.md)
-- [Cantilever Beam - Multi Patch - Geometric Non-Linear Analysis](https://github.com/KratosMultiphysics/Examples/blob/master/iga/validation/geometric_nonlinear_analysis_multi_patch_cantilever_beam/README.md)
-- [Cantilever Beam - Single Patch - Geometric Non-Linear Analysis](https://github.com/KratosMultiphysics/Examples/blob/master/iga/validation/geometric_nonlinear_analysis_single_patch_cantilever_beam/README.md)
-- [Plate with Hole - Trimmed Patch - Linear Analysis](https://github.com/KratosMultiphysics/Examples/blob/master/iga/validation/geometric_linear_analysis_trimmed_patch_plate_with_hole/README.md)
-- [Scordelis-Lo Roof - Single_Patch - Linear Analysis](https://github.com/KratosMultiphysics/Examples/blob/master/iga/validation/geometric_linear_analysis_single_patch_scordelis_lo_roof/README.md)
+- [Buckling Analysis - Single Patch - Cantilever Beam](https://github.com/KratosMultiphysics/Examples/blob/master/iga/validation/buckling_analysis_single_patch_cantilever_beam/README.md)
+- [Geometric Linear Analysis - Single Patch - Scordelis-Lo Roof](https://github.com/KratosMultiphysics/Examples/blob/master/iga/validation/geometric_linear_analysis_single_patch_scordelis_lo_roof/README.md)
+- [Geometric Linear Analysis - Trimmed Patch - Plate with Hole](https://github.com/KratosMultiphysics/Examples/blob/master/iga/validation/geometric_linear_analysis_trimmed_patch_plate_with_hole/README.md)
+- [Geometric Non-Linear Analysis - Multi Patch - Cantilever Beam](https://github.com/KratosMultiphysics/Examples/blob/master/iga/validation/geometric_nonlinear_analysis_multi_patch_cantilever_beam/README.md)
+- [Geometric Non-Linear Analysis - Single Patch - Cantilever Beam](https://github.com/KratosMultiphysics/Examples/blob/master/iga/validation/geometric_nonlinear_analysis_single_patch_cantilever_beam/README.md)
