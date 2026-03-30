@@ -4,7 +4,7 @@
 
 **Kratos version:** 10.2
 
-**Source files:** [Buckling Analysis - Single Patch - Cantilever Beam](https://github.com/KratosMultiphysics/Examples/tree/master/iga/validation/buckling_analysis/source)
+**Source files:** [Buckling Analysis - Single Patch - Cantilever Beam](https://github.com/KratosMultiphysics/Examples/tree/master/iga/validation/buckling_analysis_single_patch_cantilever_beam/source)
 
 ## Problem definition
 

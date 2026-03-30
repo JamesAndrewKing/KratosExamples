@@ -12,8 +12,8 @@ The Examples are continuously updated and extended
 - [3D Laplacian on an Embedded Cube with SBM](https://github.com/KratosMultiphysics/Examples/blob/master/iga/use_cases/laplacian_3d_cube_sbm/README.md)
 
 ## Validation Cases
-- [Buckling Analysis](https://github.com/KratosMultiphysics/Examples/blob/master/iga/validation/buckling_analysis/README.md)
-- [Cantilever Beam - Multi Patch - Geometric Non-Linear Analysis](https://github.com/KratosMultiphysics/Examples/blob/master/iga/validation/cantilever_beam_multi_patch_non_linear/README.md)
-- [Cantilever Beam - Single Patch - Geometric Non-Linear Analysis](https://github.com/KratosMultiphysics/Examples/blob/master/iga/validation/cantilever_beam_single_patch_non_linear/README.md)
-- [Plate with Hole - Trimmed Patch - Linear Analysis](https://github.com/KratosMultiphysics/Examples/blob/master/iga/validation/plate_with_hole_trimmed_patch_linear/README.md)
-- [Scordelis-Lo Roof - Single_Patch - Linear Analysis](https://github.com/KratosMultiphysics/Examples/blob/master/iga/validation/scordelis_lo_roof_single_patch_linear/README.md)
+- [Buckling Analysis](https://github.com/KratosMultiphysics/Examples/blob/master/iga/validation/buckling_analysis_single_patch_cantilever_beam/README.md)
+- [Cantilever Beam - Multi Patch - Geometric Non-Linear Analysis](https://github.com/KratosMultiphysics/Examples/blob/master/iga/validation/geometric_nonlinear_analysis_multi_patch_cantilever_beam/README.md)
+- [Cantilever Beam - Single Patch - Geometric Non-Linear Analysis](https://github.com/KratosMultiphysics/Examples/blob/master/iga/validation/geometric_nonlinear_analysis_single_patch_cantilever_beam/README.md)
+- [Plate with Hole - Trimmed Patch - Linear Analysis](https://github.com/KratosMultiphysics/Examples/blob/master/iga/validation/geometric_linear_analysis_trimmed_patch_plate_with_hole/README.md)
+- [Scordelis-Lo Roof - Single_Patch - Linear Analysis](https://github.com/KratosMultiphysics/Examples/blob/master/iga/validation/geometric_linear_analysis_single_patch_scordelis_lo_roof/README.md)

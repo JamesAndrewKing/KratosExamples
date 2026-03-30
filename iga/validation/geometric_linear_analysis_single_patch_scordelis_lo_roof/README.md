@@ -4,7 +4,7 @@
 
 **Kratos version:** 10.4
 
-**Source files:** [Geometric Linear Analysis - Single Patch - Scordelis-Lo Roof](https://github.com/KratosMultiphysics/Examples/tree/master/iga/validation/scordelis_lo_roof_single_patch_linear/source)
+**Source files:** [Geometric Linear Analysis - Single Patch - Scordelis-Lo Roof](https://github.com/KratosMultiphysics/Examples/tree/master/iga/validation/geometric_linear_analysis_single_patch_scordelis_lo_roof/source)
 
 
 ## Problem definition

@@ -4,7 +4,7 @@
 
 **Kratos version:** 10.4
 
-**Source files:** [Geometric Linear Analysis - Trimmed Patch - Plate with Hole](https://github.com/KratosMultiphysics/Examples/tree/master/iga/validation/plate_with_hole_trimmed_patch_linear/source)
+**Source files:** [Geometric Linear Analysis - Trimmed Patch - Plate with Hole](https://github.com/KratosMultiphysics/Examples/tree/master/iga/validation/geometric_linear_analysis_trimmed_patch_plate_with_hole/source)
 
 
 ## Problem definition

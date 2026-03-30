@@ -4,7 +4,7 @@
 
 **Kratos version:** 10.4
 
-**Source files:** [Geometric Non-Linear Analysis - Single Patch - Cantilever Beam](https://github.com/KratosMultiphysics/Examples/tree/master/iga/validation/cantilever_beam_multi_patch_non_linear/source)
+**Source files:** [Geometric Non-Linear Analysis - Single Patch - Cantilever Beam](https://github.com/KratosMultiphysics/Examples/tree/master/iga/validation/geometric_nonlinear_analysis_single_patch_cantilever_beam/source)
 
 ## Problem definition
 
