@@ -21,6 +21,8 @@ The plate is modeled using single trimmed NURBS patch with the Shell3pElement. T
 
 The displacement at point A is obtained as -6.3511 units, which is in agreement with the reference value of -6.3499 units.
 
+![Displacement](data/Model.png)
+
 ## References
 
 1. Michael Breitenberger, *CAD-Integrated Design and Analysis of Shell Structures*, PhD Dissertation, pp. 122–125. [Link](https://mediatum.ub.tum.de/doc/1311417/93268.pdf)

@@ -22,6 +22,8 @@ The roof is modeled using single NURBS patch with the Shell3pElement. The CAD mo
 
 The displacement at mid of the free edge as -0.3068 units, which is in agreement with the reference value of -0.3024 units.
 
+![Displacement](data/Model.png)
+
 ## References
 
 1. Josef M. Kiendl, *Isogeometric Analysis and Shape Optimal Design of Shell Structures*, PhD Dissertation, pp. 51–52. [Link](https://mediatum.ub.tum.de/doc/1002634/464162.pdf)

@@ -21,6 +21,8 @@ The cantilever beam is modeled using two connected NURBS patches with the Shell3
 
 The load-displacement curve obtained at the free end is shown in [figure](data/LoadStep_vs_Displacement_XZ.png). This shows a good agreement with the reference [1] - Figure 2a and Table 2. 
 
+![Displacement](data/Model.png)
+
 | Reference Force vs Displacement [1] | Force vs Displacement - From Kratos |
 | :---: | :---: |
 | ![Reference Force vs Displacement](data/Reference_LoadStep_vs_Displacement_XZ.png) | ![Kratos Force vs Displacement](data/LoadStep_vs_Displacement_XZ.png) |
