@@ -16,11 +16,11 @@ This example presents the validation of Scordelis-Lo Roof with Shell3pElement in
 
 Load = 90 per unit
 
-The roof is modeled using single IGA patch with the Shell3pElement. The CAD model is constructed with single span b-splines of curve degree 2 in both axis of the plate. Additional refinement is applied in Kratos, by increasing the curve degree to 4 and inserting 6 knots in each direction of the plate. 
+The roof is modeled using single NURBS patch with the Shell3pElement. The CAD model is constructed with single span b-splines of curve degree 2 in both axis of the roof. Additional refinement is applied in Kratos, by increasing the curve degree to 4 and inserting 6 knots in each direction of the roof. 
 
 ## Results
 
-The displacement at point A is obtained as -0.3068 units, which is in agreement with the reference value of -0.3024 units.
+The displacement at mid of the free edge as -0.3068 units, which is in agreement with the reference value of -0.3024 units.
 
 ## References
 

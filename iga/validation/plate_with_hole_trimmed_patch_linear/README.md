@@ -15,7 +15,7 @@ This example presents the validation of geometric linear analysis for a square p
 *Structural System [1]*
 
 
-The plate is modeled using single trimmed IGA patch with the Shell3pElement. The CAD model is constructed with single span b-splines of curve degree 2 in both axis of the plate. Additional refinement is applied in Kratos, by increasing the curve degree to 4 and inserting 15 knots in each direction of the plate. 
+The plate is modeled using single trimmed NURBS patch with the Shell3pElement. The CAD model is constructed with single span b-splines of curve degree 2 in both axis of the plate. Additional refinement is applied in Kratos, by increasing the curve degree to 4 and inserting 15 knots in each direction of the plate. 
 
 ## Results
 

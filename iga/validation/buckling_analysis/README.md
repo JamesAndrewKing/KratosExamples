@@ -15,7 +15,7 @@ This example presents the validation of buckling analysis in Kratos with IGA ele
 *Structural System [1]*
 
 
-The cantilever beam is modeled using single IGA patch with the Shell3pElement. The CAD model of both the patches is constructed with single span B-spline surfaces. The patch has an curve degree of 2 in both axes. Additional refinement is applied in Kratos by increasing the curve degree by 2 in both directions. Additional refinement is applied in Kratos, by increasing the curve degree to 4 in both directions and inserting 4 knots in the width and 20 knots along the length of the beam.
+The cantilever beam is modeled using single NURBS patch with the Shell3pElement. The CAD model of both the patches is constructed with single span B-spline surfaces and has a curve degree of 2 in both axes. Additional refinement is applied in Kratos, by increasing the curve degree to 4 in both axes and inserting 4 knots in the width and 20 knots along the length of the beam.
 
 ## Results
 
@@ -30,11 +30,11 @@ The buckling load factors are shown in table below. The corresponding buckling m
 
 | Buckling Mode Shape 1 | Buckling Mode Shape 2 |
 | :---: | :---: |
-| ![Buckling Mode Shape 1](data/Buckling_Mode_Shape_1.png) | ![Buckling Mode Shape 2](data/Buckling_Mode_Shape_2.png) |
+| ![Buckling Mode Shape 1](data/Buckling_Mode_1.png) | ![Buckling Mode Shape 2](data/Buckling_Mode_2.png) |
 
 | Buckling Mode Shape 3 | Buckling Mode Shape 4 |
 | :---: | :---: |
-| ![Buckling Mode Shape 3](data/Buckling_Mode_Shape_3.png) | ![Buckling Mode Shape 4](data/Buckling_Mode_Shape_4.png) |
+| ![Buckling Mode Shape 3](data/Buckling_Mode_3.png) | ![Buckling Mode Shape 4](data/Buckling_Mode_4.png) |
 
 
 

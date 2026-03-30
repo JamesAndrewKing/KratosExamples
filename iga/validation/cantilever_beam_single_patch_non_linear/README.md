@@ -4,7 +4,7 @@
 
 **Kratos version:** 10.4
 
-**Source files:** [Cantilever Beam - Multi Patch - Geometric Non-Linear Analysis](https://github.com/KratosMultiphysics/Examples/tree/master/iga/validation/cantilever_beam_multi_patch_non_linear/source)
+**Source files:** [Cantilever Beam - Single Patch - Geometric Non-Linear Analysis](https://github.com/KratosMultiphysics/Examples/tree/master/iga/validation/cantilever_beam_multi_patch_non_linear/source)
 
 ## Problem definition
 
@@ -15,7 +15,7 @@ This example presents the validation of geometric non-linear analysis of a canti
 *Structural System [1]*
 
 
-The cantilever beam is modeled using two connected NURBS patches with the Shell3pElement. The CAD model of both the patches is constructed with single span B-spline surfaces. The first patch has an curve degree of 2 in both axes and the second patch has an curve degree of 3 in the longitudinal direction and 2 in the transverse direction. Additional refinement is applied in Kratos by increasing the curve degree by 1 in both directions for both patches. Furthermore, h-refinement is applied by inserting 4 knots longitudinally and 3 knots transversely in the first patch, alongside 12 knots longitudinally and 4 knots transversely in the second patch. Hence on the edge where two surfaces gets connected, in the first patch number of elements is 4 and in 2nd patch the number of elements is 5. Therefore they are nonconforming patches. 
+The cantilever beam is modeled using a single NURB patches with the Shell3pElement. The CAD model of the patches is constructed with single span B-spline surface. The patch has an curve degree of 3 in the longitudinal direction and 2 in the transverse direction. Additional refinement is applied in Kratos by increasing the curve degree by 1 in both directions for both patches. Furthermore, h-refinement is applied by inserting 10 knots longitudinally and 3 knots transversely in the patch. 
 
 ## Results
 
