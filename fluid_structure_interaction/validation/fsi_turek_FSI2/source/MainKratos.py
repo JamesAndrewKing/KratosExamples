@@ -128,6 +128,90 @@ for source_name, target_name in pairs:
     arguments = [f"{source}={target}" for source, target in output_pairs]
     subprocess.run([pvpython, "-c", conversion_script, *arguments], check=True)
 
+
+class BeamDisplacementCsvWriter:
+
+    def __init__(self, model, output_interval=0.01):
+        self.model = model
+        self.output_interval = output_interval
+        self.output_path = Path("beam_displacement_timeseries.csv")
+        self.sample_points = [
+            ("x_0_30", 0.30, 0.20),
+            ("x_0_40", 0.40, 0.20),
+            ("x_0_50", 0.50, 0.20),
+            ("tip", 0.60, 0.20)
+        ]
+        self.sample_nodes = []
+        self.next_output_time = 0.0
+        self.output_file = None
+
+    def Initialize(self):
+        structure = self.model["Structure"]
+        self.sample_nodes = [
+            (name, self._FindNearestNode(structure, x, y))
+            for name, x, y in self.sample_points
+        ]
+
+        self.output_file = self.output_path.open("w")
+        self._WriteHeader()
+        self.WriteCurrentStep(force=True)
+
+    def Finalize(self):
+        if self.output_file is not None:
+            self.output_file.close()
+            self.output_file = None
+
+    def WriteCurrentStep(self, force=False):
+        structure = self.model["Structure"]
+        current_time = structure.ProcessInfo[KratosMultiphysics.TIME]
+
+        if not force and current_time + 1e-12 < self.next_output_time:
+            return
+
+        row = [f"{current_time:.12g}"]
+        for _, node in self.sample_nodes:
+            displacement = node.GetSolutionStepValue(KratosMultiphysics.DISPLACEMENT)
+            row.extend([
+                f"{displacement[0]:.12g}",
+                f"{displacement[1]:.12g}",
+                f"{displacement[2]:.12g}"
+            ])
+
+        self.output_file.write(",".join(row) + "\n")
+        self.output_file.flush()
+        self.next_output_time = current_time + self.output_interval
+
+    def _FindNearestNode(self, model_part, x, y):
+        nearest_node = None
+        nearest_distance_squared = float("inf")
+
+        for node in model_part.Nodes:
+            distance_squared = (node.X0 - x) ** 2 + (node.Y0 - y) ** 2
+            if distance_squared < nearest_distance_squared:
+                nearest_node = node
+                nearest_distance_squared = distance_squared
+
+        return nearest_node
+
+    def _WriteHeader(self):
+        metadata = ["time"]
+        header = ["time"]
+        for name, node in self.sample_nodes:
+            metadata.extend([
+                f"{name}_node_id={node.Id}",
+                f"{name}_x0={node.X0:.12g}",
+                f"{name}_y0={node.Y0:.12g}"
+            ])
+            header.extend([
+                f"{name}_DISPLACEMENT_X",
+                f"{name}_DISPLACEMENT_Y",
+                f"{name}_DISPLACEMENT_Z"
+            ])
+
+        self.output_file.write(",".join(metadata) + "\n")
+        self.output_file.write(",".join(header) + "\n")
+
+
 def CreateAnalysisStageWithFlushInstance(cls, global_model, parameters):
     class AnalysisStageWithFlush(cls):
 
@@ -135,20 +219,27 @@ def CreateAnalysisStageWithFlushInstance(cls, global_model, parameters):
             super().__init__(model, project_parameters)
             self.flush_frequency = flush_frequency
             self.last_flush = time.time()
+            self.beam_displacement_writer = BeamDisplacementCsvWriter(model)
             sys.stdout.flush()
 
         def Initialize(self):
             super().Initialize()
+            self.beam_displacement_writer.Initialize()
             sys.stdout.flush()
 
         def FinalizeSolutionStep(self):
             super().FinalizeSolutionStep()
+            self.beam_displacement_writer.WriteCurrentStep()
 
             if self.parallel_type == "OpenMP":
                 now = time.time()
                 if now - self.last_flush > self.flush_frequency:
                     sys.stdout.flush()
                     self.last_flush = now
+
+        def Finalize(self):
+            self.beam_displacement_writer.Finalize()
+            super().Finalize()
 
     return AnalysisStageWithFlush(global_model, parameters)
 

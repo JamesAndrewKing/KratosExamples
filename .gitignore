@@ -7,6 +7,9 @@
 # Recovery files
 *~
 
+# macOS metadata files
+.DS_Store
+
 # Compiled python
 *.pyc
 
@@ -22,6 +25,10 @@
 # VTK post files
 *.vtk
 *.vtu
+*.pvd
+
+# CSV post files
+*.csv
 
 # HDF5 files
 *.h5
