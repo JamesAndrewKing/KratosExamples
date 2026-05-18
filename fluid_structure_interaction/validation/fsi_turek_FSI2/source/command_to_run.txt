@@ -1,0 +1,8 @@
+cd /Users/jaking/KratosExamples/fluid_structure_interaction/validation/fsi_turek_FSI2/source
+
+KRATOS_ROOT=/Users/jaking/Kratos/bin/Release
+
+caffeinate -dims env \
+  PYTHONPATH="$KRATOS_ROOT:$KRATOS_ROOT/libs" \
+  DYLD_LIBRARY_PATH="$KRATOS_ROOT/libs:$KRATOS_ROOT" \
+  /usr/local/bin/python3.14 MainKratos.py

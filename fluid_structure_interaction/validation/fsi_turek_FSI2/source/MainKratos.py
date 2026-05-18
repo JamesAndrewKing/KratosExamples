@@ -74,10 +74,19 @@ import sys
 
 from vtkmodules.vtkIOLegacy import vtkUnstructuredGridReader
 from vtkmodules.vtkIOXML import vtkXMLUnstructuredGridWriter
+from vtkmodules.vtkCommonCore import vtkPoints
+from vtkmodules.vtkCommonDataModel import vtkUnstructuredGrid
 
-pairs = [tuple(item.split("=", 1)) for item in sys.argv[1:]]
 
-for source_name, target_name in pairs:
+def ParseOutputPair(item):
+    source_name, rest = item.split("=", 1)
+    target_name, deformation_variable_name = rest.split(":", 1)
+    return source_name, target_name, deformation_variable_name
+
+
+pairs = [ParseOutputPair(item) for item in sys.argv[1:]]
+
+for source_name, target_name, deformation_variable_name in pairs:
     source_path = Path(source_name)
     target_path = Path(target_name)
 
@@ -102,9 +111,26 @@ for source_name, target_name in pairs:
         reader.SetFileName(str(vtk_file))
         reader.Update()
 
+        output = vtkUnstructuredGrid()
+        output.DeepCopy(reader.GetOutput())
+        deformation = output.GetPointData().GetArray(deformation_variable_name)
+        if deformation is not None:
+            points = vtkPoints()
+            points.SetNumberOfPoints(output.GetNumberOfPoints())
+            for i in range(output.GetNumberOfPoints()):
+                point = output.GetPoint(i)
+                displacement = deformation.GetTuple(i)
+                points.SetPoint(
+                    i,
+                    point[0] + displacement[0],
+                    point[1] + displacement[1],
+                    point[2] + displacement[2]
+                )
+            output.SetPoints(points)
+
         writer = vtkXMLUnstructuredGridWriter()
         writer.SetFileName(str(target_path / vtu_name))
-        writer.SetInputData(reader.GetOutput())
+        writer.SetInputData(output)
         writer.SetDataModeToBinary()
         writer.Write()
 
@@ -125,7 +151,10 @@ for source_name, target_name in pairs:
     (target_path / "paraview_series.pvd").write_text(pvd_contents)
 """
 
-    arguments = [f"{source}={target}" for source, target in output_pairs]
+    arguments = [
+        f"{source}={target}:{deformation_variable}"
+        for source, target, deformation_variable in output_pairs
+    ]
     subprocess.run([pvpython, "-c", conversion_script, *arguments], check=True)
 
 
@@ -267,6 +296,6 @@ if __name__ == "__main__":
     simulation.Run()
 
     WriteParaViewCollections([
-        ("vtk_output_fluid", "paraview_fluid"),
-        ("vtk_output_structure", "paraview_structure")
+        ("vtk_output_fluid", "paraview_fluid", "MESH_DISPLACEMENT"),
+        ("vtk_output_structure", "paraview_structure", "DISPLACEMENT")
     ])
