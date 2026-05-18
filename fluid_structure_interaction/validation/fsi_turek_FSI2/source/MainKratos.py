@@ -5,11 +5,19 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+from datetime import datetime
 
 import KratosMultiphysics
 
 
-def AddParaViewOutput(project_parameters):
+def CreateRunOutputDirectory():
+    run_name = datetime.now().strftime("run_%Y%m%d_%H%M%S")
+    output_directory = Path("run_outputs") / run_name
+    output_directory.mkdir(parents=True, exist_ok=True)
+    return output_directory
+
+
+def AddParaViewOutput(project_parameters, output_directory):
     project_parameters["output_processes"]["vtk_output"] = [{
         "python_module": "vtk_output_process",
         "kratos_module": "KratosMultiphysics",
@@ -22,7 +30,7 @@ def AddParaViewOutput(project_parameters):
             "file_format": "binary",
             "output_precision": 7,
             "output_sub_model_parts": False,
-            "output_path": "vtk_output_structure",
+            "output_path": str(output_directory / "vtk_output_structure"),
             "save_output_files_in_folder": True,
             "nodal_solution_step_data_variables": ["DISPLACEMENT", "REACTION", "VELOCITY", "ACCELERATION"],
             "nodal_data_value_variables": [],
@@ -42,7 +50,7 @@ def AddParaViewOutput(project_parameters):
             "file_format": "binary",
             "output_precision": 7,
             "output_sub_model_parts": False,
-            "output_path": "vtk_output_fluid",
+            "output_path": str(output_directory / "vtk_output_fluid"),
             "save_output_files_in_folder": True,
             "nodal_solution_step_data_variables": ["VELOCITY", "PRESSURE", "MESH_DISPLACEMENT"],
             "nodal_data_value_variables": [],
@@ -50,6 +58,33 @@ def AddParaViewOutput(project_parameters):
             "condition_data_value_variables": []
         }
     }]
+
+
+def AddCylinderActuatorProcess(project_parameters, output_directory):
+    actuator_process = {
+        "python_module": "localized_cylinder_actuator_process",
+        "Parameters": {
+            "model_part_name": "FluidModelPart.NoSlip2D_Cylinder",
+            "output_file_name": str(output_directory / "actuator_timeseries.csv"),
+            "cylinder_center": [0.2, 0.2, 0.0],
+            "actuators": [{
+                "name": "rabault_pair",
+                "type": "rabault_pair",
+                "theta1_degrees": 60.0,
+                "theta2_degrees": 70.0,
+                "width_degrees": 10.0,
+                "controller_type": "sinusoidal",
+                "amplitude": 0.02,
+                "frequency": 1.0,
+                "phase": 0.0,
+                "offset": 0.0,
+                "interval": [0.0, "End"]
+            }]
+        }
+    }
+
+    process_list = project_parameters["processes"]["fluid_boundary_conditions_process_list"]
+    process_list.append(actuator_process)
 
 
 def WriteParaViewCollections(output_pairs):
@@ -160,10 +195,10 @@ for source_name, target_name, deformation_variable_name in pairs:
 
 class BeamDisplacementCsvWriter:
 
-    def __init__(self, model, output_interval=0.01):
+    def __init__(self, model, output_path, output_interval=0.01):
         self.model = model
         self.output_interval = output_interval
-        self.output_path = Path("beam_displacement_timeseries.csv")
+        self.output_path = Path(output_path)
         self.sample_points = [
             ("x_0_30", 0.30, 0.20),
             ("x_0_40", 0.40, 0.20),
@@ -181,6 +216,7 @@ class BeamDisplacementCsvWriter:
             for name, x, y in self.sample_points
         ]
 
+        self.output_path.parent.mkdir(parents=True, exist_ok=True)
         self.output_file = self.output_path.open("w")
         self._WriteHeader()
         self.WriteCurrentStep(force=True)
@@ -241,14 +277,17 @@ class BeamDisplacementCsvWriter:
         self.output_file.write(",".join(header) + "\n")
 
 
-def CreateAnalysisStageWithFlushInstance(cls, global_model, parameters):
+def CreateAnalysisStageWithFlushInstance(cls, global_model, parameters, output_directory):
     class AnalysisStageWithFlush(cls):
 
         def __init__(self, model, project_parameters, flush_frequency=10.0):
             super().__init__(model, project_parameters)
             self.flush_frequency = flush_frequency
             self.last_flush = time.time()
-            self.beam_displacement_writer = BeamDisplacementCsvWriter(model)
+            self.beam_displacement_writer = BeamDisplacementCsvWriter(
+                model,
+                output_directory / "beam_displacement_timeseries.csv"
+            )
             sys.stdout.flush()
 
         def Initialize(self):
@@ -278,7 +317,11 @@ if __name__ == "__main__":
     with open("ProjectParameters.json", 'r') as parameter_file:
         parameter_data = json.load(parameter_file)
 
-    AddParaViewOutput(parameter_data)
+    output_directory = CreateRunOutputDirectory()
+    AddParaViewOutput(parameter_data, output_directory)
+    AddCylinderActuatorProcess(parameter_data, output_directory)
+    with (output_directory / "ProjectParameters.effective.json").open("w") as parameter_file:
+        json.dump(parameter_data, parameter_file, indent=4)
     parameters = KratosMultiphysics.Parameters(json.dumps(parameter_data))
 
     analysis_stage_module_name = parameters["analysis_stage"].GetString()
@@ -292,10 +335,20 @@ if __name__ == "__main__":
 
     global_model = KratosMultiphysics.Model()
     simulation = CreateAnalysisStageWithFlushInstance(
-        analysis_stage_class, global_model, parameters)
+        analysis_stage_class, global_model, parameters, output_directory)
     simulation.Run()
 
     WriteParaViewCollections([
-        ("vtk_output_fluid", "paraview_fluid", "MESH_DISPLACEMENT"),
-        ("vtk_output_structure", "paraview_structure", "DISPLACEMENT")
+        (
+            output_directory / "vtk_output_fluid",
+            output_directory / "paraview_fluid",
+            "MESH_DISPLACEMENT"
+        ),
+        (
+            output_directory / "vtk_output_structure",
+            output_directory / "paraview_structure",
+            "DISPLACEMENT"
+        )
     ])
+
+    print(f"Run outputs written to: {output_directory.resolve()}")

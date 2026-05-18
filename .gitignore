@@ -42,3 +42,6 @@
 
 # Backup files
 *.bak
+
+# Generated example run outputs
+run_outputs/
