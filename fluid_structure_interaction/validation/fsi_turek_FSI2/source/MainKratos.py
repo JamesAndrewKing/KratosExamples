@@ -2,6 +2,7 @@ import sys
 import time
 import importlib
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -10,14 +11,33 @@ from datetime import datetime
 import KratosMultiphysics
 
 
+def ReadFloatEnvironmentVariable(name, default_value):
+    value = os.environ.get(name)
+    if value is None:
+        return default_value
+    return float(value)
+
+
+def ReadBooleanEnvironmentVariable(name, default_value):
+    value = os.environ.get(name)
+    if value is None:
+        return default_value
+    return value.lower() not in ("0", "false", "no", "off")
+
+
 def CreateRunOutputDirectory():
     run_name = datetime.now().strftime("run_%Y%m%d_%H%M%S")
+    label = os.environ.get("KRATOS_FSI_RUN_LABEL")
+    if label:
+        label = "".join(character if character.isalnum() or character in "-_" else "_" for character in label)
+        run_name = f"{run_name}_{label}"
     output_directory = Path("run_outputs") / run_name
     output_directory.mkdir(parents=True, exist_ok=True)
     return output_directory
 
 
 def AddParaViewOutput(project_parameters, output_directory):
+    output_interval = ReadFloatEnvironmentVariable("KRATOS_FSI_OUTPUT_INTERVAL", 0.01)
     project_parameters["output_processes"]["vtk_output"] = [{
         "python_module": "vtk_output_process",
         "kratos_module": "KratosMultiphysics",
@@ -26,7 +46,7 @@ def AddParaViewOutput(project_parameters, output_directory):
         "Parameters": {
             "model_part_name": "Structure",
             "output_control_type": "time",
-            "output_interval": 0.01,
+            "output_interval": output_interval,
             "file_format": "binary",
             "output_precision": 7,
             "output_sub_model_parts": False,
@@ -46,7 +66,7 @@ def AddParaViewOutput(project_parameters, output_directory):
         "Parameters": {
             "model_part_name": "FluidModelPart.fluid_computational_model_part",
             "output_control_type": "time",
-            "output_interval": 0.01,
+            "output_interval": output_interval,
             "file_format": "binary",
             "output_precision": 7,
             "output_sub_model_parts": False,
@@ -61,6 +81,15 @@ def AddParaViewOutput(project_parameters, output_directory):
 
 
 def AddCylinderActuatorProcess(project_parameters, output_directory):
+    controller_type = os.environ.get("KRATOS_FSI_CONTROLLER_TYPE", "beam_tip_feedback")
+    proportional_gain = ReadFloatEnvironmentVariable("KRATOS_FSI_KP", 200.0)
+    derivative_gain = ReadFloatEnvironmentVariable("KRATOS_FSI_KD", 2.0)
+    control_sign = ReadFloatEnvironmentVariable("KRATOS_FSI_CONTROL_SIGN", -1.0)
+    max_abs_control = ReadFloatEnvironmentVariable("KRATOS_FSI_QMAX", 0.08)
+    feedback_delay = ReadFloatEnvironmentVariable("KRATOS_FSI_FEEDBACK_DELAY", 0.0)
+    oscillator_frequency = ReadFloatEnvironmentVariable("KRATOS_FSI_OSCILLATOR_FREQUENCY", 3.8)
+    oscillator_phase_shift = ReadFloatEnvironmentVariable("KRATOS_FSI_OSCILLATOR_PHASE_SHIFT", 0.0)
+    oscillator_gain = ReadFloatEnvironmentVariable("KRATOS_FSI_OSCILLATOR_GAIN", 200.0)
     actuator_process = {
         "python_module": "localized_cylinder_actuator_process",
         "Parameters": {
@@ -73,11 +102,21 @@ def AddCylinderActuatorProcess(project_parameters, output_directory):
                 "theta1_degrees": 60.0,
                 "theta2_degrees": 70.0,
                 "width_degrees": 10.0,
-                "controller_type": "sinusoidal",
+                "controller_type": controller_type,
                 "amplitude": 0.02,
                 "frequency": 1.0,
                 "phase": 0.0,
                 "offset": 0.0,
+                "feedback_model_part_name": "Structure",
+                "feedback_point": [0.60, 0.20, 0.0],
+                "proportional_gain": proportional_gain,
+                "derivative_gain": derivative_gain,
+                "control_sign": control_sign,
+                "max_abs_control": max_abs_control,
+                "feedback_delay": feedback_delay,
+                "oscillator_frequency": oscillator_frequency,
+                "oscillator_phase_shift": oscillator_phase_shift,
+                "oscillator_gain": oscillator_gain,
                 "interval": [0.0, "End"]
             }]
         }
@@ -318,7 +357,13 @@ if __name__ == "__main__":
         parameter_data = json.load(parameter_file)
 
     output_directory = CreateRunOutputDirectory()
-    AddParaViewOutput(parameter_data, output_directory)
+    end_time = os.environ.get("KRATOS_FSI_END_TIME")
+    if end_time is not None:
+        parameter_data["problem_data"]["end_time"] = float(end_time)
+
+    write_paraview = ReadBooleanEnvironmentVariable("KRATOS_FSI_WRITE_PARAVIEW", True)
+    if write_paraview:
+        AddParaViewOutput(parameter_data, output_directory)
     AddCylinderActuatorProcess(parameter_data, output_directory)
     with (output_directory / "ProjectParameters.effective.json").open("w") as parameter_file:
         json.dump(parameter_data, parameter_file, indent=4)
@@ -338,17 +383,18 @@ if __name__ == "__main__":
         analysis_stage_class, global_model, parameters, output_directory)
     simulation.Run()
 
-    WriteParaViewCollections([
-        (
-            output_directory / "vtk_output_fluid",
-            output_directory / "paraview_fluid",
-            "MESH_DISPLACEMENT"
-        ),
-        (
-            output_directory / "vtk_output_structure",
-            output_directory / "paraview_structure",
-            "DISPLACEMENT"
-        )
-    ])
+    if write_paraview:
+        WriteParaViewCollections([
+            (
+                output_directory / "vtk_output_fluid",
+                output_directory / "paraview_fluid",
+                "MESH_DISPLACEMENT"
+            ),
+            (
+                output_directory / "vtk_output_structure",
+                output_directory / "paraview_structure",
+                "DISPLACEMENT"
+            )
+        ])
 
     print(f"Run outputs written to: {output_directory.resolve()}")
