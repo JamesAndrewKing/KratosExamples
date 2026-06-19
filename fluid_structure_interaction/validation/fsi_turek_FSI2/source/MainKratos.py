@@ -82,6 +82,13 @@ def AddParaViewOutput(project_parameters, output_directory):
 
 def AddCylinderActuatorProcess(project_parameters, output_directory):
     controller_type = os.environ.get("KRATOS_FSI_CONTROLLER_TYPE", "beam_tip_feedback")
+    actuator_amplitude = ReadFloatEnvironmentVariable("KRATOS_FSI_ACTUATOR_AMPLITUDE", 0.02)
+    actuator_frequency = ReadFloatEnvironmentVariable("KRATOS_FSI_ACTUATOR_FREQUENCY", 1.0)
+    actuator_phase = ReadFloatEnvironmentVariable("KRATOS_FSI_ACTUATOR_PHASE", 0.0)
+    actuator_offset = ReadFloatEnvironmentVariable("KRATOS_FSI_ACTUATOR_OFFSET", 0.0)
+    actuator_csv_file_name = os.environ.get("KRATOS_FSI_ACTUATOR_CSV_FILE", "")
+    actuator_csv_time_column = os.environ.get("KRATOS_FSI_ACTUATOR_CSV_TIME_COLUMN", "time")
+    actuator_csv_value_column = os.environ.get("KRATOS_FSI_ACTUATOR_CSV_VALUE_COLUMN", "value")
     proportional_gain = ReadFloatEnvironmentVariable("KRATOS_FSI_KP", 200.0)
     derivative_gain = ReadFloatEnvironmentVariable("KRATOS_FSI_KD", 2.0)
     control_sign = ReadFloatEnvironmentVariable("KRATOS_FSI_CONTROL_SIGN", -1.0)
@@ -103,10 +110,13 @@ def AddCylinderActuatorProcess(project_parameters, output_directory):
                 "theta2_degrees": 70.0,
                 "width_degrees": 10.0,
                 "controller_type": controller_type,
-                "amplitude": 0.02,
-                "frequency": 1.0,
-                "phase": 0.0,
-                "offset": 0.0,
+                "amplitude": actuator_amplitude,
+                "frequency": actuator_frequency,
+                "phase": actuator_phase,
+                "offset": actuator_offset,
+                "csv_file_name": actuator_csv_file_name,
+                "csv_time_column": actuator_csv_time_column,
+                "csv_value_column": actuator_csv_value_column,
                 "feedback_model_part_name": "Structure",
                 "feedback_point": [0.60, 0.20, 0.0],
                 "proportional_gain": proportional_gain,
