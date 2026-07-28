@@ -81,22 +81,13 @@ def AddParaViewOutput(project_parameters, output_directory):
 
 
 def AddCylinderActuatorProcess(project_parameters, output_directory):
-    controller_type = os.environ.get("KRATOS_FSI_CONTROLLER_TYPE", "beam_tip_feedback")
-    actuator_amplitude = ReadFloatEnvironmentVariable("KRATOS_FSI_ACTUATOR_AMPLITUDE", 0.02)
-    actuator_frequency = ReadFloatEnvironmentVariable("KRATOS_FSI_ACTUATOR_FREQUENCY", 1.0)
+    controller_type = os.environ.get("KRATOS_FSI_CONTROLLER_TYPE", "sinusoidal")
+    actuator_amplitude = ReadFloatEnvironmentVariable("KRATOS_FSI_ACTUATOR_AMPLITUDE", 0.0)
+    actuator_frequency = ReadFloatEnvironmentVariable("KRATOS_FSI_ACTUATOR_FREQUENCY", 0.0)
     actuator_phase = ReadFloatEnvironmentVariable("KRATOS_FSI_ACTUATOR_PHASE", 0.0)
-    actuator_offset = ReadFloatEnvironmentVariable("KRATOS_FSI_ACTUATOR_OFFSET", 0.0)
     actuator_csv_file_name = os.environ.get("KRATOS_FSI_ACTUATOR_CSV_FILE", "")
     actuator_csv_time_column = os.environ.get("KRATOS_FSI_ACTUATOR_CSV_TIME_COLUMN", "time")
     actuator_csv_value_column = os.environ.get("KRATOS_FSI_ACTUATOR_CSV_VALUE_COLUMN", "value")
-    proportional_gain = ReadFloatEnvironmentVariable("KRATOS_FSI_KP", 200.0)
-    derivative_gain = ReadFloatEnvironmentVariable("KRATOS_FSI_KD", 2.0)
-    control_sign = ReadFloatEnvironmentVariable("KRATOS_FSI_CONTROL_SIGN", -1.0)
-    max_abs_control = ReadFloatEnvironmentVariable("KRATOS_FSI_QMAX", 0.08)
-    feedback_delay = ReadFloatEnvironmentVariable("KRATOS_FSI_FEEDBACK_DELAY", 0.0)
-    oscillator_frequency = ReadFloatEnvironmentVariable("KRATOS_FSI_OSCILLATOR_FREQUENCY", 3.8)
-    oscillator_phase_shift = ReadFloatEnvironmentVariable("KRATOS_FSI_OSCILLATOR_PHASE_SHIFT", 0.0)
-    oscillator_gain = ReadFloatEnvironmentVariable("KRATOS_FSI_OSCILLATOR_GAIN", 200.0)
     actuator_process = {
         "python_module": "localized_cylinder_actuator_process",
         "Parameters": {
@@ -113,20 +104,9 @@ def AddCylinderActuatorProcess(project_parameters, output_directory):
                 "amplitude": actuator_amplitude,
                 "frequency": actuator_frequency,
                 "phase": actuator_phase,
-                "offset": actuator_offset,
                 "csv_file_name": actuator_csv_file_name,
                 "csv_time_column": actuator_csv_time_column,
                 "csv_value_column": actuator_csv_value_column,
-                "feedback_model_part_name": "Structure",
-                "feedback_point": [0.60, 0.20, 0.0],
-                "proportional_gain": proportional_gain,
-                "derivative_gain": derivative_gain,
-                "control_sign": control_sign,
-                "max_abs_control": max_abs_control,
-                "feedback_delay": feedback_delay,
-                "oscillator_frequency": oscillator_frequency,
-                "oscillator_phase_shift": oscillator_phase_shift,
-                "oscillator_gain": oscillator_gain,
                 "interval": [0.0, "End"]
             }]
         }
@@ -136,7 +116,7 @@ def AddCylinderActuatorProcess(project_parameters, output_directory):
     process_list.append(actuator_process)
 
 
-def WriteParaViewCollections(output_pairs):
+def WriteParaViewCollections(output_directory):
     pvpython = (
         shutil.which("pvpython")
         or "/Applications/ParaView-6.0.0-RC1.app/Contents/bin/pvpython"
@@ -149,97 +129,8 @@ def WriteParaViewCollections(output_pairs):
         )
         return
 
-    conversion_script = r"""
-from pathlib import Path
-import html
-import re
-import shutil
-import sys
-
-from vtkmodules.vtkIOLegacy import vtkUnstructuredGridReader
-from vtkmodules.vtkIOXML import vtkXMLUnstructuredGridWriter
-from vtkmodules.vtkCommonCore import vtkPoints
-from vtkmodules.vtkCommonDataModel import vtkUnstructuredGrid
-
-
-def ParseOutputPair(item):
-    source_name, rest = item.split("=", 1)
-    target_name, deformation_variable_name = rest.split(":", 1)
-    return source_name, target_name, deformation_variable_name
-
-
-pairs = [ParseOutputPair(item) for item in sys.argv[1:]]
-
-for source_name, target_name, deformation_variable_name in pairs:
-    source_path = Path(source_name)
-    target_path = Path(target_name)
-
-    if not source_path.exists():
-        continue
-
-    vtk_files = sorted(source_path.glob("*.vtk"))
-    if not vtk_files:
-        continue
-
-    if target_path.exists():
-        shutil.rmtree(target_path)
-    target_path.mkdir(parents=True)
-
-    data_sets = []
-    for vtk_file in vtk_files:
-        time_match = re.findall(r"_(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\.vtk$", vtk_file.name)
-        output_time = float(time_match[-1]) if time_match else float(len(data_sets))
-        vtu_name = vtk_file.stem + ".vtu"
-
-        reader = vtkUnstructuredGridReader()
-        reader.SetFileName(str(vtk_file))
-        reader.Update()
-
-        output = vtkUnstructuredGrid()
-        output.DeepCopy(reader.GetOutput())
-        deformation = output.GetPointData().GetArray(deformation_variable_name)
-        if deformation is not None:
-            points = vtkPoints()
-            points.SetNumberOfPoints(output.GetNumberOfPoints())
-            for i in range(output.GetNumberOfPoints()):
-                point = output.GetPoint(i)
-                displacement = deformation.GetTuple(i)
-                points.SetPoint(
-                    i,
-                    point[0] + displacement[0],
-                    point[1] + displacement[1],
-                    point[2] + displacement[2]
-                )
-            output.SetPoints(points)
-
-        writer = vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(str(target_path / vtu_name))
-        writer.SetInputData(output)
-        writer.SetDataModeToBinary()
-        writer.Write()
-
-        data_sets.append((output_time, vtu_name))
-
-    rows = [
-        f'    <DataSet timestep="{time:g}" group="" part="0" file="{html.escape(file_name)}"/>'
-        for time, file_name in data_sets
-    ]
-    pvd_contents = (
-        '<?xml version="1.0"?>\n'
-        '<VTKFile type="Collection" version="0.1" byte_order="LittleEndian">\n'
-        '  <Collection>\n'
-        + "\n".join(rows)
-        + '\n  </Collection>\n'
-        '</VTKFile>\n'
-    )
-    (target_path / "paraview_series.pvd").write_text(pvd_contents)
-"""
-
-    arguments = [
-        f"{source}={target}:{deformation_variable}"
-        for source, target, deformation_variable in output_pairs
-    ]
-    subprocess.run([pvpython, "-c", conversion_script, *arguments], check=True)
+    conversion_script = Path(__file__).resolve().parent / "convert_vtk_output_to_paraview.py"
+    subprocess.run([pvpython, str(conversion_script), str(output_directory)], check=True)
 
 
 class BeamDisplacementCsvWriter:
@@ -394,17 +285,6 @@ if __name__ == "__main__":
     simulation.Run()
 
     if write_paraview:
-        WriteParaViewCollections([
-            (
-                output_directory / "vtk_output_fluid",
-                output_directory / "paraview_fluid",
-                "MESH_DISPLACEMENT"
-            ),
-            (
-                output_directory / "vtk_output_structure",
-                output_directory / "paraview_structure",
-                "DISPLACEMENT"
-            )
-        ])
+        WriteParaViewCollections(output_directory)
 
     print(f"Run outputs written to: {output_directory.resolve()}")

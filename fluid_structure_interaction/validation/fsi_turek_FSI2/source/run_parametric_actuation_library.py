@@ -1,19 +1,24 @@
-# run using: 
-# cd /Users/jaking/KratosExamples/fluid_structure_interaction/validation/fsi_turek_FSI2/source
-# PYTHONPATH=/Users/jaking/Kratos/bin/Release DYLD_LIBRARY_PATH=/Users/jaking/Kratos/bin/Release/libs python3 run_parametric_actuation_library.py
+"""Run the Turek FSI2 parametric actuator library.
+
+The generated identification data uses
+    value = amplitude * cos(theta_rad)
+with Delta = [amplitude, omega_rad_s] and Theta = [theta_rad].
+"""
 
 import csv
 import json
 import math
 import os
+import shutil
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
 
 
-PYTHONPATH = "/Users/jaking/Kratos/bin/Release"
-DYLD_LIBRARY_PATH = "/Users/jaking/Kratos/bin/Release/libs"
+PYTHONPATH = os.environ.get("KRATOS_FSI_PYTHONPATH")
+DYLD_LIBRARY_PATH = os.environ.get("KRATOS_FSI_DYLD_LIBRARY_PATH")
+LD_LIBRARY_PATH = os.environ.get("KRATOS_FSI_LD_LIBRARY_PATH")
 
 # The uncontrolled FSI2 response we observed is in the few-Hz range. The grid below
 # is deliberately centered near 3.8 Hz, with moderate excursions to expose detuning.
@@ -25,6 +30,7 @@ DEFAULT_END_TIME = 2.0
 DEFAULT_OUTPUT_INTERVAL = 0.01
 DEFAULT_SIGNAL_DT = 0.002
 DEFAULT_WRITE_PARAVIEW = False
+TWO_PI = 2.0 * math.pi
 
 
 def main():
@@ -43,10 +49,19 @@ def main():
     signal_dt = read_float("KRATOS_FSI_LIBRARY_SIGNAL_DT", DEFAULT_SIGNAL_DT)
     write_paraview = read_bool("KRATOS_FSI_LIBRARY_WRITE_PARAVIEW", DEFAULT_WRITE_PARAVIEW)
     limit = read_optional_int("KRATOS_FSI_LIBRARY_LIMIT")
+    case_index = read_optional_int("KRATOS_FSI_LIBRARY_CASE_INDEX")
 
-    cases = build_case_library(end_time)
+    all_cases = build_case_library(end_time)
+    cases = all_cases
     if limit is not None:
         cases = cases[:limit]
+    if case_index is not None:
+        if case_index < 0 or case_index >= len(all_cases):
+            raise IndexError(
+                f"KRATOS_FSI_LIBRARY_CASE_INDEX={case_index} is outside "
+                f"the case range 0..{len(all_cases) - 1}."
+            )
+        cases = [all_cases[case_index]]
 
     manifest = {
         "campaign_label": campaign_label,
@@ -57,9 +72,30 @@ def main():
         "output_interval": output_interval,
         "signal_dt": signal_dt,
         "write_paraview": write_paraview,
-        "cases": cases,
+        "input_timeseries_convention": (
+            "value = amplitude * cos(theta_rad), "
+            "theta_rad = theta_unwrapped_rad mod 2pi"
+        ),
+        "identification_snapshot_columns": {
+            "X": "beam displacement measurement columns prefixed with measurement_",
+            "Delta": ["delta_amplitude", "delta_omega_rad_s"],
+            "Theta": ["theta_rad"],
+        },
+        "total_number_of_cases": len(all_cases),
+        "cases": all_cases,
     }
-    (campaign_directory / "manifest.json").write_text(json.dumps(manifest, indent=4))
+    manifest_path = campaign_directory / "manifest.json"
+    if case_index is None or not manifest_path.exists():
+        manifest_path.write_text(json.dumps(manifest, indent=4))
+
+    if case_index is not None:
+        selection_directory = campaign_directory / "case_selections"
+        selection_directory.mkdir(parents=True, exist_ok=True)
+        selection_path = selection_directory / f"{case_index:03d}_{cases[0]['label']}.json"
+        selection_path.write_text(json.dumps({
+            "case_index": case_index,
+            "case": cases[0],
+        }, indent=4))
 
     results = []
     for i, case in enumerate(cases, start=1):
@@ -70,12 +106,17 @@ def main():
             **case,
             **metrics,
             "run_directory": str(run_directory.resolve()),
+            "input_timeseries": str((run_directory / "input_timeseries.csv").resolve()),
+            "identification_snapshots": str((run_directory / "identification_snapshots.csv").resolve()),
         }
         results.append(result)
-        append_result(campaign_directory / "summary.csv", result)
+        write_case_result(campaign_directory, result)
+        if case_index is None:
+            append_result(campaign_directory / "summary.csv", result)
         print(format_result(result), flush=True)
 
-    (campaign_directory / "summary.json").write_text(json.dumps(results, indent=4))
+    if case_index is None:
+        (campaign_directory / "summary.json").write_text(json.dumps(results, indent=4))
     print(f"campaign={campaign_directory.resolve()}")
 
 
@@ -107,7 +148,7 @@ def build_case_library(end_time):
     for amplitude, frequency in [(0.10, 3.4), (0.10, 3.8), (0.10, 4.2), (0.12, 3.8)]:
         cases.append({
             "label": f"sine_high_A{amplitude:.3f}_f{frequency:.2f}".replace(".", "p"),
-            "kind": "single_sine_high_amplitude",
+            "kind": "single_sine",
             "controller": "sinusoidal",
             "amplitude": amplitude,
             "frequency": frequency,
@@ -177,15 +218,14 @@ def build_case_library(end_time):
 
 def run_case(case, campaign_directory, end_time, output_interval, signal_dt, write_paraview):
     before = set(Path("run_outputs").glob("run_*"))
+    input_path = campaign_directory / "inputs" / f"{case['label']}.csv"
+    write_input_timeseries_csv(input_path, case, end_time, signal_dt)
     signal_path = None
     if case["controller"] == "csv":
-        signal_path = campaign_directory / "signals" / f"{case['label']}.csv"
-        write_signal_csv(signal_path, case, end_time, signal_dt)
+        signal_path = input_path
 
     environment = os.environ.copy()
     environment.update({
-        "PYTHONPATH": PYTHONPATH,
-        "DYLD_LIBRARY_PATH": DYLD_LIBRARY_PATH,
         "KRATOS_FSI_RUN_LABEL": case["label"],
         "KRATOS_FSI_END_TIME": str(end_time),
         "KRATOS_FSI_OUTPUT_INTERVAL": str(output_interval),
@@ -194,9 +234,13 @@ def run_case(case, campaign_directory, end_time, output_interval, signal_dt, wri
         "KRATOS_FSI_ACTUATOR_AMPLITUDE": str(case.get("amplitude", 0.0)),
         "KRATOS_FSI_ACTUATOR_FREQUENCY": str(case.get("frequency", 0.0)),
         "KRATOS_FSI_ACTUATOR_PHASE": str(case.get("phase", 0.0)),
-        "KRATOS_FSI_ACTUATOR_OFFSET": "0.0",
-        "KRATOS_FSI_QMAX": "0.0",
     })
+    if PYTHONPATH:
+        environment["PYTHONPATH"] = PYTHONPATH
+    if DYLD_LIBRARY_PATH:
+        environment["DYLD_LIBRARY_PATH"] = DYLD_LIBRARY_PATH
+    if LD_LIBRARY_PATH:
+        environment["LD_LIBRARY_PATH"] = LD_LIBRARY_PATH
     if signal_path is not None:
         environment.update({
             "KRATOS_FSI_ACTUATOR_CSV_FILE": str(signal_path.resolve()),
@@ -223,10 +267,18 @@ def run_case(case, campaign_directory, end_time, output_interval, signal_dt, wri
     run_directory = created[-1]
     metadata = {
         "case": case,
+        "input_path": str(input_path.resolve()),
         "signal_path": str(signal_path.resolve()) if signal_path is not None else "",
+        "identification_snapshots_path": str((run_directory / "identification_snapshots.csv").resolve()),
         "return_code": completed.returncode,
         "log_path": str(log_path.resolve()),
     }
+    shutil.copyfile(input_path, run_directory / "input_timeseries.csv")
+    write_identification_snapshots_csv(
+        run_directory / "beam_displacement_timeseries.csv",
+        input_path,
+        run_directory / "identification_snapshots.csv",
+    )
     (run_directory / "case_metadata.json").write_text(json.dumps(metadata, indent=4))
 
     if completed.returncode != 0:
@@ -235,12 +287,20 @@ def run_case(case, campaign_directory, end_time, output_interval, signal_dt, wri
     return run_directory
 
 
-def write_signal_csv(path, case, end_time, dt):
+def write_input_timeseries_csv(path, case, end_time, dt):
     path.parent.mkdir(parents=True, exist_ok=True)
-    phase = 0.0
+    theta_unwrapped = case.get("phase", 0.0)
     with path.open("w", newline="") as output_file:
         writer = csv.writer(output_file)
-        writer.writerow(["time", "value", "amplitude", "frequency"])
+        writer.writerow([
+            "time",
+            "value",
+            "amplitude",
+            "frequency_hz",
+            "omega_rad_s",
+            "theta_rad",
+            "theta_unwrapped_rad",
+        ])
         number_of_steps = int(math.ceil(end_time / dt))
         previous_time = 0.0
         for step in range(number_of_steps + 1):
@@ -248,11 +308,93 @@ def write_signal_csv(path, case, end_time, dt):
             ratio = time / end_time if end_time > 0.0 else 0.0
             amplitude = evaluate_amplitude(case, ratio)
             frequency = evaluate_frequency(case, ratio)
+            omega = TWO_PI * frequency
             if step > 0:
-                phase += 2.0 * math.pi * frequency * (time - previous_time)
-            value = amplitude * math.sin(phase)
-            writer.writerow([f"{time:.12g}", f"{value:.12g}", f"{amplitude:.12g}", f"{frequency:.12g}"])
+                theta_unwrapped += omega * (time - previous_time)
+            theta = theta_unwrapped % TWO_PI
+            value = amplitude * math.cos(theta)
+            writer.writerow([
+                f"{time:.12g}",
+                f"{value:.12g}",
+                f"{amplitude:.12g}",
+                f"{frequency:.12g}",
+                f"{omega:.12g}",
+                f"{theta:.12g}",
+                f"{theta_unwrapped:.12g}",
+            ])
             previous_time = time
+
+
+def write_identification_snapshots_csv(beam_path, input_path, output_path):
+    input_rows = read_input_rows_by_time(input_path)
+    input_rows_by_time = {
+        round(row["time_float"], 12): row
+        for row in input_rows
+    }
+
+    with beam_path.open(newline="") as beam_file:
+        beam_reader = csv.reader(beam_file)
+        metadata = next(beam_reader)
+        beam_header = next(beam_reader)
+        beam_rows = list(beam_reader)
+
+    measurement_columns = beam_header[1:]
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", newline="") as output_file:
+        writer = csv.writer(output_file)
+        writer.writerow([
+            "time",
+            *[f"measurement_{name}" for name in measurement_columns],
+            "delta_amplitude",
+            "delta_omega_rad_s",
+            "theta_rad",
+            "theta_unwrapped_rad",
+            "control_value",
+        ])
+
+        for beam_row in beam_rows:
+            time = float(beam_row[0])
+            input_row = find_input_row(input_rows, input_rows_by_time, time)
+            writer.writerow([
+                f"{time:.12g}",
+                *beam_row[1:],
+                input_row["amplitude"],
+                input_row["omega_rad_s"],
+                input_row["theta_rad"],
+                input_row["theta_unwrapped_rad"],
+                input_row["value"],
+            ])
+
+    metadata_path = output_path.with_suffix(".metadata.csv")
+    with metadata_path.open("w", newline="") as metadata_file:
+        writer = csv.writer(metadata_file)
+        writer.writerow(metadata)
+
+
+def read_input_rows_by_time(input_path):
+    rows = []
+    with input_path.open(newline="") as input_file:
+        reader = csv.DictReader(input_file)
+        for row in reader:
+            row["time_float"] = float(row["time"])
+            rows.append(row)
+    if not rows:
+        raise RuntimeError(f"No input rows found in {input_path}.")
+    return rows
+
+
+def find_input_row(input_rows, input_rows_by_time, time):
+    rounded_time = round(time, 12)
+    if rounded_time in input_rows_by_time:
+        return input_rows_by_time[rounded_time]
+
+    nearest = min(input_rows, key=lambda row: abs(row["time_float"] - time))
+    if abs(nearest["time_float"] - time) > 1e-9:
+        raise RuntimeError(
+            f"No input sample near measurement time {time:.12g}; "
+            f"nearest is {nearest['time_float']:.12g}."
+        )
+    return nearest
 
 
 def evaluate_amplitude(case, ratio):
@@ -315,6 +457,13 @@ def collect_metrics(run_directory):
     return metrics
 
 
+def write_case_result(campaign_directory, result):
+    results_directory = campaign_directory / "case_results"
+    results_directory.mkdir(parents=True, exist_ok=True)
+    result_path = results_directory / f"{result['label']}.json"
+    result_path.write_text(json.dumps(result, indent=4))
+
+
 def append_result(path, result):
     fieldnames = [
         "label",
@@ -335,6 +484,8 @@ def append_result(path, result):
         "rms_control",
         "number_of_samples",
         "run_directory",
+        "input_timeseries",
+        "identification_snapshots",
     ]
     exists = path.exists()
     with path.open("a", newline="") as output_file:

@@ -17,10 +17,8 @@ class SinusoidalController:
         self.amplitude = settings["amplitude"].GetDouble()
         self.frequency = settings["frequency"].GetDouble()
         self.phase = settings["phase"].GetDouble()
-        self.offset = settings["offset"].GetDouble()
-
-    def ComputeControl(self, time, feedback):
-        return self.offset + self.amplitude * math.sin(
+    def ComputeControl(self, time):
+        return self.amplitude * math.cos(
             2.0 * math.pi * self.frequency * time + self.phase
         )
 
@@ -43,7 +41,7 @@ class CsvSignalController:
         if len(self.times) < 2:
             raise RuntimeError("CSV actuator signals require at least two samples.")
 
-    def ComputeControl(self, time, feedback):
+    def ComputeControl(self, time):
         if time <= self.times[0]:
             return self.values[0]
         if time >= self.times[-1]:
@@ -57,143 +55,6 @@ class CsvSignalController:
                 return self.values[i - 1] + ratio * (self.values[i] - self.values[i - 1])
 
         return self.values[-1]
-
-
-class BeamTipFeedbackController:
-
-    def __init__(self, model, settings):
-        self.model = model
-        self.model_part_name = settings["feedback_model_part_name"].GetString()
-        self.target_x = settings["feedback_point"][0].GetDouble()
-        self.target_y = settings["feedback_point"][1].GetDouble()
-        self.kp = settings["proportional_gain"].GetDouble()
-        self.kd = settings["derivative_gain"].GetDouble()
-        self.control_sign = settings["control_sign"].GetDouble()
-        self.max_abs_control = settings["max_abs_control"].GetDouble()
-        self.feedback_delay = settings["feedback_delay"].GetDouble()
-        self.history = []
-        self.node = None
-
-    def ComputeControl(self, time, feedback):
-        if self.node is None:
-            self.node = self._FindNearestNode()
-
-        displacement = self.node.GetSolutionStepValue(KratosMultiphysics.DISPLACEMENT)
-        velocity = self.node.GetSolutionStepValue(KratosMultiphysics.VELOCITY)
-        self.history.append((time, displacement[1], velocity[1]))
-        delayed_displacement_y, delayed_velocity_y = self._GetDelayedFeedback(time)
-        control = self.control_sign * (self.kp * delayed_displacement_y + self.kd * delayed_velocity_y)
-
-        if self.max_abs_control > 0.0:
-            control = max(-self.max_abs_control, min(self.max_abs_control, control))
-
-        feedback["beam_tip_displacement_y"] = displacement[1]
-        feedback["beam_tip_velocity_y"] = velocity[1]
-        feedback["delayed_beam_tip_displacement_y"] = delayed_displacement_y
-        feedback["delayed_beam_tip_velocity_y"] = delayed_velocity_y
-        return control
-
-    def _GetDelayedFeedback(self, time):
-        target_time = time - self.feedback_delay
-        if target_time <= self.history[0][0]:
-            return self.history[0][1], self.history[0][2]
-
-        previous_time, previous_displacement_y, previous_velocity_y = self.history[0]
-        for next_time, next_displacement_y, next_velocity_y in self.history[1:]:
-            if target_time <= next_time:
-                ratio = (target_time - previous_time) / (next_time - previous_time)
-                displacement_y = previous_displacement_y + ratio * (
-                    next_displacement_y - previous_displacement_y
-                )
-                velocity_y = previous_velocity_y + ratio * (
-                    next_velocity_y - previous_velocity_y
-                )
-                return displacement_y, velocity_y
-            previous_time = next_time
-            previous_displacement_y = next_displacement_y
-            previous_velocity_y = next_velocity_y
-
-        return self.history[-1][1], self.history[-1][2]
-
-    def _FindNearestNode(self):
-        model_part = self.model[self.model_part_name]
-        nearest_node = None
-        nearest_distance_squared = float("inf")
-
-        for node in model_part.Nodes:
-            distance_squared = (
-                (node.X0 - self.target_x) ** 2
-                + (node.Y0 - self.target_y) ** 2
-            )
-            if distance_squared < nearest_distance_squared:
-                nearest_node = node
-                nearest_distance_squared = distance_squared
-
-        if nearest_node is None:
-            raise RuntimeError(
-                f'Feedback controller found no nodes in "{self.model_part_name}".'
-            )
-        return nearest_node
-
-
-class BeamTipPhaseController:
-
-    def __init__(self, model, settings):
-        self.model = model
-        self.model_part_name = settings["feedback_model_part_name"].GetString()
-        self.target_x = settings["feedback_point"][0].GetDouble()
-        self.target_y = settings["feedback_point"][1].GetDouble()
-        self.frequency = settings["oscillator_frequency"].GetDouble()
-        self.phase_shift = settings["oscillator_phase_shift"].GetDouble()
-        self.gain = settings["oscillator_gain"].GetDouble()
-        self.control_sign = settings["control_sign"].GetDouble()
-        self.max_abs_control = settings["max_abs_control"].GetDouble()
-        self.node = None
-
-        if self.frequency <= 0.0:
-            raise ValueError("oscillator_frequency must be positive.")
-
-    def ComputeControl(self, time, feedback):
-        if self.node is None:
-            self.node = self._FindNearestNode()
-
-        displacement = self.node.GetSolutionStepValue(KratosMultiphysics.DISPLACEMENT)
-        velocity = self.node.GetSolutionStepValue(KratosMultiphysics.VELOCITY)
-        omega = 2.0 * math.pi * self.frequency
-        normalized_velocity_y = velocity[1] / omega
-        phase_signal = (
-            displacement[1] * math.cos(self.phase_shift)
-            + normalized_velocity_y * math.sin(self.phase_shift)
-        )
-        control = self.control_sign * self.gain * phase_signal
-
-        if self.max_abs_control > 0.0:
-            control = max(-self.max_abs_control, min(self.max_abs_control, control))
-
-        feedback["beam_tip_displacement_y"] = displacement[1]
-        feedback["beam_tip_velocity_y"] = velocity[1]
-        feedback["phase_signal"] = phase_signal
-        return control
-
-    def _FindNearestNode(self):
-        model_part = self.model[self.model_part_name]
-        nearest_node = None
-        nearest_distance_squared = float("inf")
-
-        for node in model_part.Nodes:
-            distance_squared = (
-                (node.X0 - self.target_x) ** 2
-                + (node.Y0 - self.target_y) ** 2
-            )
-            if distance_squared < nearest_distance_squared:
-                nearest_node = node
-                nearest_distance_squared = distance_squared
-
-        if nearest_node is None:
-            raise RuntimeError(
-                f'Phase controller found no nodes in "{self.model_part_name}".'
-            )
-        return nearest_node
 
 
 class LocalizedCylinderActuatorProcess(KratosMultiphysics.Process):
@@ -217,20 +78,9 @@ class LocalizedCylinderActuatorProcess(KratosMultiphysics.Process):
                 "amplitude" : 0.02,
                 "frequency" : 1.0,
                 "phase" : 0.0,
-                "offset" : 0.0,
                 "csv_file_name" : "",
                 "csv_time_column" : "time",
                 "csv_value_column" : "value",
-                "feedback_model_part_name" : "Structure",
-                "feedback_point" : [0.6, 0.2, 0.0],
-                "proportional_gain" : 0.0,
-                "derivative_gain" : 0.0,
-                "control_sign" : -1.0,
-                "max_abs_control" : 0.0,
-                "feedback_delay" : 0.0,
-                "oscillator_frequency" : 3.8,
-                "oscillator_phase_shift" : 0.0,
-                "oscillator_gain" : 200.0,
                 "interval" : [0.0, "End"]
             }]
         }""")
@@ -269,14 +119,13 @@ class LocalizedCylinderActuatorProcess(KratosMultiphysics.Process):
 
     def ExecuteInitializeSolutionStep(self):
         time = self.model_part.ProcessInfo[KratosMultiphysics.TIME]
-        feedback = {}
 
         for actuator in self.actuators:
             control_value = 0.0
             if self._IsInInterval(time, actuator["interval"]):
                 control_value = (
                     actuator["control_multiplier"]
-                    * actuator["controller"].ComputeControl(time, feedback)
+                    * actuator["controller"].ComputeControl(time)
                 )
 
             weighted_velocity = [0.0, 0.0, 0.0]
@@ -414,10 +263,6 @@ class LocalizedCylinderActuatorProcess(KratosMultiphysics.Process):
             return SinusoidalController(settings)
         if controller_type == "csv":
             return CsvSignalController(settings)
-        if controller_type == "beam_tip_feedback":
-            return BeamTipFeedbackController(self.model, settings)
-        if controller_type == "beam_tip_phase":
-            return BeamTipPhaseController(self.model, settings)
         raise ValueError(f'Unsupported actuator controller_type "{controller_type}".')
 
     def _CalculateDirection(self, dx, dy, direction_type):
