@@ -94,6 +94,7 @@ def AddCylinderActuatorProcess(project_parameters, output_directory):
     actuator_csv_file_name = os.environ.get("KRATOS_FSI_ACTUATOR_CSV_FILE", "")
     actuator_csv_time_column = os.environ.get("KRATOS_FSI_ACTUATOR_CSV_TIME_COLUMN", "time")
     actuator_csv_value_column = os.environ.get("KRATOS_FSI_ACTUATOR_CSV_VALUE_COLUMN", "value")
+    actuator_csv_interpolation = os.environ.get("KRATOS_FSI_ACTUATOR_CSV_INTERPOLATION", "linear")
     actuator_process = {
         "python_module": "localized_cylinder_actuator_process",
         "Parameters": {
@@ -113,6 +114,7 @@ def AddCylinderActuatorProcess(project_parameters, output_directory):
                 "csv_file_name": actuator_csv_file_name,
                 "csv_time_column": actuator_csv_time_column,
                 "csv_value_column": actuator_csv_value_column,
+                "csv_interpolation": actuator_csv_interpolation,
                 "interval": [0.0, "End"]
             }]
         }

@@ -1,5 +1,6 @@
 import csv
 import math
+from bisect import bisect_left, bisect_right
 from pathlib import Path
 
 import KratosMultiphysics
@@ -31,6 +32,7 @@ class CsvSignalController:
         file_name = settings["csv_file_name"].GetString()
         time_column = settings["csv_time_column"].GetString()
         value_column = settings["csv_value_column"].GetString()
+        self.interpolation = settings["csv_interpolation"].GetString()
 
         with Path(file_name).open(newline="") as input_file:
             reader = csv.DictReader(input_file)
@@ -40,6 +42,10 @@ class CsvSignalController:
 
         if len(self.times) < 2:
             raise RuntimeError("CSV actuator signals require at least two samples.")
+        if self.interpolation not in ("linear", "zoh"):
+            raise ValueError('csv_interpolation must be "linear" or "zoh".')
+        if any(next_time <= time for time, next_time in zip(self.times, self.times[1:])):
+            raise RuntimeError("CSV actuator signal times must be strictly increasing.")
 
     def ComputeControl(self, time):
         if time <= self.times[0]:
@@ -47,14 +53,14 @@ class CsvSignalController:
         if time >= self.times[-1]:
             return self.values[-1]
 
-        for i in range(1, len(self.times)):
-            if time <= self.times[i]:
-                previous_time = self.times[i - 1]
-                next_time = self.times[i]
-                ratio = (time - previous_time) / (next_time - previous_time)
-                return self.values[i - 1] + ratio * (self.values[i] - self.values[i - 1])
+        if self.interpolation == "zoh":
+            return self.values[bisect_right(self.times, time) - 1]
 
-        return self.values[-1]
+        i = bisect_left(self.times, time)
+        previous_time = self.times[i - 1]
+        next_time = self.times[i]
+        ratio = (time - previous_time) / (next_time - previous_time)
+        return self.values[i - 1] + ratio * (self.values[i] - self.values[i - 1])
 
 
 class LocalizedCylinderActuatorProcess(KratosMultiphysics.Process):
@@ -81,6 +87,7 @@ class LocalizedCylinderActuatorProcess(KratosMultiphysics.Process):
                 "csv_file_name" : "",
                 "csv_time_column" : "time",
                 "csv_value_column" : "value",
+                "csv_interpolation" : "linear",
                 "interval" : [0.0, "End"]
             }]
         }""")
