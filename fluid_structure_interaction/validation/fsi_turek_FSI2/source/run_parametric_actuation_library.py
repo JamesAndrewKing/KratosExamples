@@ -217,7 +217,13 @@ def build_case_library(end_time):
 
 
 def run_case(case, campaign_directory, end_time, output_interval, signal_dt, write_paraview):
-    before = set(Path("run_outputs").glob("run_*"))
+    run_directory = campaign_directory / "runs" / case["label"]
+    if run_directory.exists() and any(run_directory.iterdir()):
+        raise RuntimeError(
+            f"Run directory {run_directory} already exists and is not empty. "
+            "Use a new KRATOS_FSI_LIBRARY_LABEL for a fresh campaign."
+        )
+
     input_path = campaign_directory / "inputs" / f"{case['label']}.csv"
     write_input_timeseries_csv(input_path, case, end_time, signal_dt)
     signal_path = None
@@ -227,6 +233,7 @@ def run_case(case, campaign_directory, end_time, output_interval, signal_dt, wri
     environment = os.environ.copy()
     environment.update({
         "KRATOS_FSI_RUN_LABEL": case["label"],
+        "KRATOS_FSI_RUN_OUTPUT_DIRECTORY": str(run_directory.resolve()),
         "KRATOS_FSI_END_TIME": str(end_time),
         "KRATOS_FSI_OUTPUT_INTERVAL": str(output_interval),
         "KRATOS_FSI_WRITE_PARAVIEW": "1" if write_paraview else "0",
@@ -259,12 +266,9 @@ def run_case(case, campaign_directory, end_time, output_interval, signal_dt, wri
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_path.write_text(completed.stdout)
 
-    after = set(Path("run_outputs").glob("run_*"))
-    created = sorted(after - before, key=lambda path: path.stat().st_mtime)
-    if not created:
-        raise RuntimeError(f"No run directory was created for {case['label']}. See {log_path}.")
+    if completed.returncode != 0:
+        raise RuntimeError(f"Run failed for {case['label']}. See {log_path}.")
 
-    run_directory = created[-1]
     metadata = {
         "case": case,
         "input_path": str(input_path.resolve()),
@@ -280,9 +284,6 @@ def run_case(case, campaign_directory, end_time, output_interval, signal_dt, wri
         run_directory / "identification_snapshots.csv",
     )
     (run_directory / "case_metadata.json").write_text(json.dumps(metadata, indent=4))
-
-    if completed.returncode != 0:
-        raise RuntimeError(f"Run failed for {case['label']}. See {log_path}.")
 
     return run_directory
 

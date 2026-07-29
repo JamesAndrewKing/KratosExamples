@@ -1,6 +1,7 @@
 import csv
 import json
 import sys
+from collections import Counter
 from pathlib import Path
 
 
@@ -40,6 +41,26 @@ def main():
 
     if not results:
         raise RuntimeError(f"No case result JSON files found in {results_directory}.")
+
+    manifest_path = campaign_directory / "manifest.json"
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text())
+        case_order = {
+            case["label"]: index
+            for index, case in enumerate(manifest.get("cases", []))
+        }
+        results.sort(key=lambda result: case_order.get(result["label"], len(case_order)))
+
+    run_directory_counts = Counter(result.get("run_directory", "") for result in results)
+    duplicate_run_directories = [
+        run_directory
+        for run_directory, count in run_directory_counts.items()
+        if run_directory and count > 1
+    ]
+    if duplicate_run_directories:
+        print("WARNING: multiple case results point to the same run directory:")
+        for run_directory in duplicate_run_directories:
+            print(f"  {run_directory}: {run_directory_counts[run_directory]} cases")
 
     (campaign_directory / "summary.json").write_text(json.dumps(results, indent=4))
     with (campaign_directory / "summary.csv").open("w", newline="") as output_file:

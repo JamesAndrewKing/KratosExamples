@@ -26,6 +26,12 @@ def ReadBooleanEnvironmentVariable(name, default_value):
 
 
 def CreateRunOutputDirectory():
+    requested_output_directory = os.environ.get("KRATOS_FSI_RUN_OUTPUT_DIRECTORY")
+    if requested_output_directory:
+        output_directory = Path(requested_output_directory)
+        output_directory.mkdir(parents=True, exist_ok=True)
+        return output_directory
+
     run_name = datetime.now().strftime("run_%Y%m%d_%H%M%S")
     label = os.environ.get("KRATOS_FSI_RUN_LABEL")
     if label:
