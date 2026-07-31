@@ -856,12 +856,19 @@ def audit_campaign(campaign_directory, manifest, results):
         for value in manifest["control_levels"]
     }
     expected_end_time = float(manifest["end_time"])
+    signal_dt = float(manifest["signal_dt"])
     for case in expected_cases:
         result = result_by_label.get(case["label"])
         if result is None:
             continue
         run_directory = Path(result["run_directory"])
-        errors.extend(audit_case_files(run_directory, case, allowed_values, expected_end_time))
+        errors.extend(audit_case_files(
+            run_directory,
+            case,
+            allowed_values,
+            expected_end_time,
+            signal_dt,
+        ))
 
     errors.extend(audit_training_coverage(expected_cases))
 
@@ -878,7 +885,7 @@ def audit_campaign(campaign_directory, manifest, results):
     print("  output schemas, ZOH alignment, mass balance, levels, seeds, and coverage are OK")
 
 
-def audit_case_files(run_directory, case, allowed_values, expected_end_time):
+def audit_case_files(run_directory, case, allowed_values, expected_end_time, signal_dt):
     errors = []
     input_path = run_directory / "input_timeseries.csv"
     identification_path = run_directory / "identification_snapshots.csv"
@@ -964,10 +971,43 @@ def audit_case_files(run_directory, case, allowed_values, expected_end_time):
             break
         expected = input_schedule.lookup(time)
         if abs(pair["upper"] - float(expected["value"])) > 1e-10:
-            errors.append(f"{case['label']}: actuator/input mismatch at t={time:.12g}.")
-            break
+            if not actuator_value_is_consistent_near_switch(
+                input_schedule,
+                time,
+                pair["upper"],
+                signal_dt,
+            ):
+                errors.append(f"{case['label']}: actuator/input mismatch at t={time:.12g}.")
+                break
 
     return errors
+
+
+def actuator_value_is_consistent_near_switch(input_schedule, time, value, signal_dt):
+    """Handle printed-time ambiguity at ZOH jumps.
+
+    Kratos writes actuator times with finite precision. At a discontinuity, the
+    internal time used by the CSV controller can be infinitesimally before the
+    switch while the printed time rounds to the switch sample. Away from switch
+    samples this still returns False, so real input mismatches remain audited.
+    """
+    center_index = bisect_right(input_schedule.times, round(time, 12)) - 1
+    start_index = max(0, center_index - 3)
+    end_index = min(len(input_schedule.rows), center_index + 5)
+    nearby_rows = input_schedule.rows[start_index:end_index]
+
+    near_switch = any(
+        int(row.get("is_switch_sample", 0)) == 1
+        and abs(row["time_float"] - time) <= 2.0 * signal_dt + 1e-12
+        for row in nearby_rows
+    )
+    if not near_switch:
+        return False
+
+    return any(
+        abs(value - float(row["value"])) <= 1e-10
+        for row in nearby_rows
+    )
 
 
 def audit_training_coverage(cases):
