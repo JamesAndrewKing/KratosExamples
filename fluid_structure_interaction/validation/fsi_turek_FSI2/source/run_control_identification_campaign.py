@@ -1157,13 +1157,35 @@ def read_manifest(campaign_directory):
 
 def read_case_results(campaign_directory):
     results_directory = campaign_directory / "case_results"
-    results = [
-        json.loads(result_path.read_text())
-        for result_path in sorted(results_directory.glob("*.json"))
-    ]
+    results = []
+    for result_path in sorted(results_directory.glob("*.json")):
+        result = json.loads(result_path.read_text())
+        localize_result_paths(campaign_directory, result, result_path)
+        results.append(result)
     if not results:
         raise RuntimeError(f"No case result JSON files found in {results_directory}.")
     return results
+
+
+def localize_result_paths(campaign_directory, result, result_path):
+    """Make downloaded campaigns auditable away from the original cluster path."""
+    label = result.get("label")
+    if not label:
+        return
+
+    local_run_directory = (campaign_directory / "runs" / label).resolve()
+    recorded_run_directory = Path(result.get("run_directory", ""))
+    if recorded_run_directory.exists() or not local_run_directory.exists():
+        return
+
+    result["run_directory"] = str(local_run_directory)
+    input_path = local_run_directory / "input_timeseries.csv"
+    identification_path = local_run_directory / "identification_snapshots.csv"
+    if input_path.exists():
+        result["input_timeseries"] = str(input_path)
+    if identification_path.exists():
+        result["identification_snapshots"] = str(identification_path)
+    result["case_result_path"] = str(result_path.resolve())
 
 
 def write_case_selection(campaign_directory, case_index, case):
