@@ -5,6 +5,8 @@ from pathlib import Path
 
 import KratosMultiphysics
 
+from fsi2_rom_mpc_controller import RomMpcController
+
 
 def Factory(settings, model):
     if not isinstance(settings, KratosMultiphysics.Parameters):
@@ -88,6 +90,15 @@ class LocalizedCylinderActuatorProcess(KratosMultiphysics.Process):
                 "csv_time_column" : "time",
                 "csv_value_column" : "value",
                 "csv_interpolation" : "linear",
+                "rom_file_name" : "",
+                "rom_log_file_name" : "rom_mpc_timeseries.csv",
+                "mpc_activation_time" : 15.0,
+                "mpc_control_interval" : 0.05,
+                "mpc_prediction_horizon" : 1.0,
+                "mpc_control_bound" : 1.5,
+                "mpc_max_control_increment" : 3.0,
+                "mpc_move_blocks" : 20,
+                "mpc_optimizer_iterations" : 8,
                 "interval" : [0.0, "End"]
             }]
         }""")
@@ -162,6 +173,12 @@ class LocalizedCylinderActuatorProcess(KratosMultiphysics.Process):
         self.output_file.flush()
 
     def ExecuteFinalize(self):
+        finalized = set()
+        for actuator in self.actuators:
+            controller = actuator["controller"]
+            if id(controller) not in finalized and hasattr(controller, "Finalize"):
+                controller.Finalize()
+                finalized.add(id(controller))
         if self.output_file is not None:
             self.output_file.close()
             self.output_file = None
@@ -270,6 +287,8 @@ class LocalizedCylinderActuatorProcess(KratosMultiphysics.Process):
             return SinusoidalController(settings)
         if controller_type == "csv":
             return CsvSignalController(settings)
+        if controller_type == "rom_mpc":
+            return RomMpcController(self.model, settings)
         raise ValueError(f'Unsupported actuator controller_type "{controller_type}".')
 
     def _CalculateDirection(self, dx, dy, direction_type):

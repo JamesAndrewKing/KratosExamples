@@ -25,6 +25,11 @@ def ReadBooleanEnvironmentVariable(name, default_value):
     return value.lower() not in ("0", "false", "no", "off")
 
 
+def ReadIntEnvironmentVariable(name, default_value):
+    value = os.environ.get(name)
+    return default_value if value is None else int(value)
+
+
 def CreateRunOutputDirectory():
     requested_output_directory = os.environ.get("KRATOS_FSI_RUN_OUTPUT_DIRECTORY")
     if requested_output_directory:
@@ -95,6 +100,7 @@ def AddCylinderActuatorProcess(project_parameters, output_directory):
     actuator_csv_time_column = os.environ.get("KRATOS_FSI_ACTUATOR_CSV_TIME_COLUMN", "time")
     actuator_csv_value_column = os.environ.get("KRATOS_FSI_ACTUATOR_CSV_VALUE_COLUMN", "value")
     actuator_csv_interpolation = os.environ.get("KRATOS_FSI_ACTUATOR_CSV_INTERPOLATION", "linear")
+    rom_file_name = os.environ.get("KRATOS_FSI_ROM_FILE", "")
     actuator_process = {
         "python_module": "localized_cylinder_actuator_process",
         "Parameters": {
@@ -115,6 +121,22 @@ def AddCylinderActuatorProcess(project_parameters, output_directory):
                 "csv_time_column": actuator_csv_time_column,
                 "csv_value_column": actuator_csv_value_column,
                 "csv_interpolation": actuator_csv_interpolation,
+                "rom_file_name": rom_file_name,
+                "rom_log_file_name": str(output_directory / "rom_mpc_timeseries.csv"),
+                "mpc_activation_time": ReadFloatEnvironmentVariable(
+                    "KRATOS_FSI_MPC_ACTIVATION_TIME", 15.0),
+                "mpc_control_interval": ReadFloatEnvironmentVariable(
+                    "KRATOS_FSI_MPC_CONTROL_INTERVAL", 0.05),
+                "mpc_prediction_horizon": ReadFloatEnvironmentVariable(
+                    "KRATOS_FSI_MPC_PREDICTION_HORIZON", 1.0),
+                "mpc_control_bound": ReadFloatEnvironmentVariable(
+                    "KRATOS_FSI_MPC_CONTROL_BOUND", 1.5),
+                "mpc_max_control_increment": ReadFloatEnvironmentVariable(
+                    "KRATOS_FSI_MPC_MAX_CONTROL_INCREMENT", 3.0),
+                "mpc_move_blocks": ReadIntEnvironmentVariable(
+                    "KRATOS_FSI_MPC_MOVE_BLOCKS", 20),
+                "mpc_optimizer_iterations": ReadIntEnvironmentVariable(
+                    "KRATOS_FSI_MPC_OPTIMIZER_ITERATIONS", 8),
                 "interval": [0.0, "End"]
             }]
         }
