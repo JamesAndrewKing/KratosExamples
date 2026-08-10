@@ -95,8 +95,8 @@ class LocalizedCylinderActuatorProcess(KratosMultiphysics.Process):
                 "mpc_activation_time" : 15.0,
                 "mpc_control_interval" : 0.05,
                 "mpc_prediction_horizon" : 1.0,
-                "mpc_control_bound" : 1.5,
-                "mpc_max_control_increment" : 3.0,
+                "mpc_control_bound" : 2.0,
+                "mpc_max_control_increment" : 0.05,
                 "mpc_move_blocks" : 20,
                 "mpc_optimizer_iterations" : 8,
                 "interval" : [0.0, "End"]

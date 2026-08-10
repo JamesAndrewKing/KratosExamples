@@ -130,9 +130,9 @@ def AddCylinderActuatorProcess(project_parameters, output_directory):
                 "mpc_prediction_horizon": ReadFloatEnvironmentVariable(
                     "KRATOS_FSI_MPC_PREDICTION_HORIZON", 1.0),
                 "mpc_control_bound": ReadFloatEnvironmentVariable(
-                    "KRATOS_FSI_MPC_CONTROL_BOUND", 1.5),
+                    "KRATOS_FSI_MPC_CONTROL_BOUND", 2.0),
                 "mpc_max_control_increment": ReadFloatEnvironmentVariable(
-                    "KRATOS_FSI_MPC_MAX_CONTROL_INCREMENT", 3.0),
+                    "KRATOS_FSI_MPC_MAX_CONTROL_INCREMENT", 0.05),
                 "mpc_move_blocks": ReadIntEnvironmentVariable(
                     "KRATOS_FSI_MPC_MOVE_BLOCKS", 20),
                 "mpc_optimizer_iterations": ReadIntEnvironmentVariable(

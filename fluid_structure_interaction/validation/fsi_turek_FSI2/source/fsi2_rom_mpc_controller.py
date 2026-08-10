@@ -114,29 +114,35 @@ class LegendreRom:
 
 
 class ReducedMpc:
-    """Bounded projected-gradient MPC with exact discrete sensitivities."""
+    """Amplitude- and slew-constrained MPC with exact discrete sensitivities."""
 
     def __init__(self, rom, target, control_bound, control_interval,
-                 prediction_horizon, move_blocks=20, optimizer_iterations=8):
+                 prediction_horizon, max_control_increment,
+                 move_blocks=20, optimizer_iterations=8):
         self.rom = rom
         self.target = target
         self.bound = control_bound
         self.dt = control_interval
         self.steps = max(1, round(prediction_horizon / control_interval))
         self.blocks = min(move_blocks, self.steps)
+        self.max_increment = max_control_increment
+        if self.bound <= 0 or self.max_increment <= 0:
+            raise ValueError("MPC control bound and increment must be positive.")
+        self.block_increment_limits = self._block_increment_limits()
         self.optimizer_iterations = optimizer_iterations
         self.guess = [0.0] * self.blocks
 
     def control(self, eta, previous_control):
-        decision = self.guess[:]
+        decision = self._project_controls(self.guess, previous_control)
         best, gradient = self._objective_gradient(eta, decision, previous_control)
         inverse_hessian = _identity(self.blocks)
         for _ in range(self.optimizer_iterations):
-            projected_gradient = gradient[:]
-            for i in range(self.blocks):
-                if ((decision[i] <= -self.bound + 1e-10 and gradient[i] > 0)
-                        or (decision[i] >= self.bound - 1e-10 and gradient[i] < 0)):
-                    projected_gradient[i] = 0.0
+            projected = self._project_controls(
+                [decision[i] - gradient[i] for i in range(self.blocks)],
+                previous_control,
+            )
+            projected_gradient = [decision[i] - projected[i]
+                                  for i in range(self.blocks)]
             if max(abs(value) for value in projected_gradient) < 1e-7:
                 break
             direction = [-value for value in _matrix_vector(
@@ -148,11 +154,14 @@ class ReducedMpc:
             step = 1.0
             accepted = False
             for _ in range(12):
-                trial = [_clip(decision[i] + step * direction[i], self.bound)
-                         for i in range(self.blocks)]
+                trial = self._project_controls(
+                    [decision[i] + step * direction[i] for i in range(self.blocks)],
+                    previous_control,
+                )
                 value = self._objective(eta, trial, previous_control)
                 displacement = [trial[i] - decision[i] for i in range(self.blocks)]
-                if value <= best + 1e-4 * _dot(gradient, displacement):
+                slope = _dot(gradient, displacement)
+                if slope < 0 and value <= best + 1e-4 * slope:
                     new_cost, new_gradient = self._objective_gradient(
                         eta, trial, previous_control)
                     change = [new_gradient[i] - gradient[i] for i in range(self.blocks)]
@@ -173,6 +182,28 @@ class ReducedMpc:
         else:
             self.guess = decision
         return decision[0], best
+
+    def _block_increment_limits(self):
+        starts = []
+        for block in range(self.blocks):
+            starts.append(next(
+                step for step in range(self.steps)
+                if min(self.blocks - 1, step * self.blocks // self.steps) == block
+            ))
+        return [self.max_increment] + [
+            self.max_increment * (starts[i] - starts[i - 1])
+            for i in range(1, self.blocks)
+        ]
+
+    def _project_controls(self, controls, previous_control):
+        feasible = []
+        old_control = previous_control
+        for control, increment in zip(controls, self.block_increment_limits):
+            lower = max(-self.bound, old_control - increment)
+            upper = min(self.bound, old_control + increment)
+            old_control = min(max(control, lower), upper)
+            feasible.append(old_control)
+        return feasible
 
     def _objective(self, eta0, decision, previous_control):
         eta = eta0[:]
@@ -270,6 +301,7 @@ class RomMpcController:
             control_bound,
             control_interval,
             prediction_horizon,
+            settings["mpc_max_control_increment"].GetDouble(),
             settings["mpc_move_blocks"].GetInt(),
             settings["mpc_optimizer_iterations"].GetInt(),
         )
