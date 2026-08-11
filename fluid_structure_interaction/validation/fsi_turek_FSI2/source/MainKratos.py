@@ -125,6 +125,10 @@ def AddCylinderActuatorProcess(project_parameters, output_directory):
                 "rom_log_file_name": str(output_directory / "rom_mpc_timeseries.csv"),
                 "mpc_activation_time": ReadFloatEnvironmentVariable(
                     "KRATOS_FSI_MPC_ACTIVATION_TIME", 15.0),
+                "mpc_initial_kick_value": ReadFloatEnvironmentVariable(
+                    "KRATOS_FSI_MPC_INITIAL_KICK_VALUE", 0.0),
+                "mpc_initial_kick_end_time": ReadFloatEnvironmentVariable(
+                    "KRATOS_FSI_MPC_INITIAL_KICK_END_TIME", 0.0),
                 "mpc_control_interval": ReadFloatEnvironmentVariable(
                     "KRATOS_FSI_MPC_CONTROL_INTERVAL", 0.05),
                 "mpc_prediction_horizon": ReadFloatEnvironmentVariable(

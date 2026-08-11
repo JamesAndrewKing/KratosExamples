@@ -307,6 +307,8 @@ class RomMpcController:
         )
         self.control_interval = control_interval
         self.activation_time = settings["mpc_activation_time"].GetDouble()
+        self.initial_kick_value = settings["mpc_initial_kick_value"].GetDouble()
+        self.initial_kick_end_time = settings["mpc_initial_kick_end_time"].GetDouble()
         self.max_increment = settings["mpc_max_control_increment"].GetDouble()
         self.current_control = 0.0
         self.next_sample_time = 0.0
@@ -334,9 +336,13 @@ class RomMpcController:
             self._append_observation()
             self.next_sample_time += self.sample_interval
 
-        if (current_time + 1e-10 < self.next_control_time
-                or len(self.history) < self.history.maxlen):
-            return self.current_control
+        if current_time + 1e-10 < self.activation_time:
+            if current_time < self.initial_kick_end_time - 1e-10:
+                return self.initial_kick_value
+            return 0.0
+
+        if len(self.history) < self.history.maxlen:
+            return 0.0
 
         eta = self._reduced_state()
         start = time.perf_counter()

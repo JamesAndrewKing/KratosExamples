@@ -93,6 +93,8 @@ class LocalizedCylinderActuatorProcess(KratosMultiphysics.Process):
                 "rom_file_name" : "",
                 "rom_log_file_name" : "rom_mpc_timeseries.csv",
                 "mpc_activation_time" : 15.0,
+                "mpc_initial_kick_value" : 0.0,
+                "mpc_initial_kick_end_time" : 0.0,
                 "mpc_control_interval" : 0.05,
                 "mpc_prediction_horizon" : 1.0,
                 "mpc_control_bound" : 2.0,
