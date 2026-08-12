@@ -322,7 +322,8 @@ class RomMpcController:
         self.writer = csv.writer(self.output_file)
         self.writer.writerow([
             "time", "eta_1", "eta_2", "control_u", "objective",
-            "solve_time_seconds", "reduced_radius"
+            "solve_time_seconds", "reduced_radius", "requested_control",
+            "control_increment", "next_control_time"
         ])
         self._append_observation()
         self.next_sample_time = self.sample_interval
@@ -338,11 +339,19 @@ class RomMpcController:
 
         if current_time + 1e-10 < self.activation_time:
             if current_time < self.initial_kick_end_time - 1e-10:
-                return self.initial_kick_value
-            return 0.0
+                self.current_control = self.initial_kick_value
+            else:
+                self.current_control = 0.0
+            return self.current_control
 
         if len(self.history) < self.history.maxlen:
-            return 0.0
+            self.current_control = 0.0
+            if current_time > self.next_control_time:
+                self.next_control_time = current_time
+            return self.current_control
+
+        if current_time + 1e-10 < self.next_control_time:
+            return self.current_control
 
         eta = self._reduced_state()
         start = time.perf_counter()
@@ -350,14 +359,16 @@ class RomMpcController:
         elapsed = time.perf_counter() - start
         change = _clip(requested - self.current_control, self.max_increment)
         self.current_control += change
-        self.next_control_time += self.control_interval
+        while self.next_control_time <= current_time + 1e-10:
+            self.next_control_time += self.control_interval
 
         target = self.mpc.target
         radius = math.sqrt(sum((eta[i] - target[i]) ** 2 for i in range(len(eta))))
         self.writer.writerow([
             f"{current_time:.12g}", *[f"{value:.12g}" for value in eta],
             f"{self.current_control:.12g}", f"{objective:.12g}",
-            f"{elapsed:.12g}", f"{radius:.12g}"
+            f"{elapsed:.12g}", f"{radius:.12g}", f"{requested:.12g}",
+            f"{change:.12g}", f"{self.next_control_time:.12g}"
         ])
         self.output_file.flush()
         return self.current_control
