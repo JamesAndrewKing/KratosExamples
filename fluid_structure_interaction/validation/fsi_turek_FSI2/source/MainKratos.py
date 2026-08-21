@@ -25,11 +25,6 @@ def ReadBooleanEnvironmentVariable(name, default_value):
     return value.lower() not in ("0", "false", "no", "off")
 
 
-def ReadIntEnvironmentVariable(name, default_value):
-    value = os.environ.get(name)
-    return default_value if value is None else int(value)
-
-
 def CreateRunOutputDirectory():
     requested_output_directory = os.environ.get("KRATOS_FSI_RUN_OUTPUT_DIRECTORY")
     if requested_output_directory:
@@ -93,56 +88,55 @@ def AddParaViewOutput(project_parameters, output_directory):
 
 def AddCylinderActuatorProcess(project_parameters, output_directory):
     controller_type = os.environ.get("KRATOS_FSI_CONTROLLER_TYPE", "sinusoidal")
-    actuator_amplitude = ReadFloatEnvironmentVariable("KRATOS_FSI_ACTUATOR_AMPLITUDE", 0.0)
-    actuator_frequency = ReadFloatEnvironmentVariable("KRATOS_FSI_ACTUATOR_FREQUENCY", 0.0)
-    actuator_phase = ReadFloatEnvironmentVariable("KRATOS_FSI_ACTUATOR_PHASE", 0.0)
-    actuator_csv_file_name = os.environ.get("KRATOS_FSI_ACTUATOR_CSV_FILE", "")
-    actuator_csv_time_column = os.environ.get("KRATOS_FSI_ACTUATOR_CSV_TIME_COLUMN", "time")
-    actuator_csv_value_column = os.environ.get("KRATOS_FSI_ACTUATOR_CSV_VALUE_COLUMN", "value")
-    actuator_csv_interpolation = os.environ.get("KRATOS_FSI_ACTUATOR_CSV_INTERPOLATION", "linear")
-    rom_file_name = os.environ.get("KRATOS_FSI_ROM_FILE", "")
+    controller_settings = {"controller_type": controller_type}
+    if controller_type == "sinusoidal":
+        controller_settings.update({
+            "amplitude": ReadFloatEnvironmentVariable(
+                "KRATOS_FSI_ACTUATOR_AMPLITUDE", 0.0),
+            "frequency": ReadFloatEnvironmentVariable(
+                "KRATOS_FSI_ACTUATOR_FREQUENCY", 0.0),
+            "phase": ReadFloatEnvironmentVariable("KRATOS_FSI_ACTUATOR_PHASE", 0.0),
+        })
+    elif controller_type == "csv":
+        controller_settings.update({
+            "csv_file_name": os.environ.get("KRATOS_FSI_ACTUATOR_CSV_FILE", ""),
+            "csv_time_column": os.environ.get(
+                "KRATOS_FSI_ACTUATOR_CSV_TIME_COLUMN", "time"),
+            "csv_value_column": os.environ.get(
+                "KRATOS_FSI_ACTUATOR_CSV_VALUE_COLUMN", "value"),
+            "csv_interpolation": os.environ.get(
+                "KRATOS_FSI_ACTUATOR_CSV_INTERPOLATION", "linear"),
+        })
+    elif controller_type == "fourier_envelope_mpc":
+        controller_settings.update({
+            "rom_file_name": os.environ.get("KRATOS_FSI_ROM_FILE", ""),
+            "rom_log_file_name": str(output_directory / "rom_mpc_timeseries.csv"),
+            "mpc_activation_time": ReadFloatEnvironmentVariable(
+                "KRATOS_FSI_MPC_ACTIVATION_TIME", 20.0),
+            "mpc_initial_kick_value": ReadFloatEnvironmentVariable(
+                "KRATOS_FSI_MPC_INITIAL_KICK_VALUE", 0.0),
+            "mpc_initial_kick_end_time": ReadFloatEnvironmentVariable(
+                "KRATOS_FSI_MPC_INITIAL_KICK_END_TIME", 0.0),
+        })
+    else:
+        raise ValueError(f'Unsupported KRATOS_FSI_CONTROLLER_TYPE "{controller_type}".')
+
+    actuator_settings = {
+        "name": "rabault_pair",
+        "type": "rabault_pair",
+        "theta1_degrees": 60.0,
+        "theta2_degrees": 70.0,
+        "width_degrees": 10.0,
+        "interval": [0.0, "End"],
+        **controller_settings,
+    }
     actuator_process = {
         "python_module": "localized_cylinder_actuator_process",
         "Parameters": {
             "model_part_name": "FluidModelPart.NoSlip2D_Cylinder",
             "output_file_name": str(output_directory / "actuator_timeseries.csv"),
             "cylinder_center": [0.2, 0.2, 0.0],
-            "actuators": [{
-                "name": "rabault_pair",
-                "type": "rabault_pair",
-                "theta1_degrees": 60.0,
-                "theta2_degrees": 70.0,
-                "width_degrees": 10.0,
-                "controller_type": controller_type,
-                "amplitude": actuator_amplitude,
-                "frequency": actuator_frequency,
-                "phase": actuator_phase,
-                "csv_file_name": actuator_csv_file_name,
-                "csv_time_column": actuator_csv_time_column,
-                "csv_value_column": actuator_csv_value_column,
-                "csv_interpolation": actuator_csv_interpolation,
-                "rom_file_name": rom_file_name,
-                "rom_log_file_name": str(output_directory / "rom_mpc_timeseries.csv"),
-                "mpc_activation_time": ReadFloatEnvironmentVariable(
-                    "KRATOS_FSI_MPC_ACTIVATION_TIME", 15.0),
-                "mpc_initial_kick_value": ReadFloatEnvironmentVariable(
-                    "KRATOS_FSI_MPC_INITIAL_KICK_VALUE", 0.0),
-                "mpc_initial_kick_end_time": ReadFloatEnvironmentVariable(
-                    "KRATOS_FSI_MPC_INITIAL_KICK_END_TIME", 0.0),
-                "mpc_control_interval": ReadFloatEnvironmentVariable(
-                    "KRATOS_FSI_MPC_CONTROL_INTERVAL", 0.05),
-                "mpc_prediction_horizon": ReadFloatEnvironmentVariable(
-                    "KRATOS_FSI_MPC_PREDICTION_HORIZON", 1.0),
-                "mpc_control_bound": ReadFloatEnvironmentVariable(
-                    "KRATOS_FSI_MPC_CONTROL_BOUND", 2.0),
-                "mpc_max_control_increment": ReadFloatEnvironmentVariable(
-                    "KRATOS_FSI_MPC_MAX_CONTROL_INCREMENT", 0.05),
-                "mpc_move_blocks": ReadIntEnvironmentVariable(
-                    "KRATOS_FSI_MPC_MOVE_BLOCKS", 20),
-                "mpc_optimizer_iterations": ReadIntEnvironmentVariable(
-                    "KRATOS_FSI_MPC_OPTIMIZER_ITERATIONS", 8),
-                "interval": [0.0, "End"]
-            }]
+            "actuators": [actuator_settings]
         }
     }
 
