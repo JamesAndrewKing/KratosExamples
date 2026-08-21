@@ -27,6 +27,7 @@ fi
 
 export KRATOS_FSI_AF_MPC_LABEL="${KRATOS_FSI_AF_MPC_LABEL:-fsi2_amplitude_frequency_mpc_t60}"
 export KRATOS_FSI_ROM_FILE="${KRATOS_FSI_ROM_FILE:-${SCRATCH}/Vortex-Shedding/data/fsi2_fourier_envelope_controller.json}"
+export KRATOS_FSI_AF_MPC_WRITE_PARAVIEW="${KRATOS_FSI_AF_MPC_WRITE_PARAVIEW:-1}"
 
 if [[ ! -f "${KRATOS_FSI_ROM_FILE}" ]]; then
     echo "Missing KRATOS_FSI_ROM_FILE=${KRATOS_FSI_ROM_FILE}" >&2
