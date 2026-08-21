@@ -233,6 +233,10 @@ def run_case(case, campaign_directory, settings):
     if log_path.exists():
         raise FileExistsError(f"Refusing to overwrite existing log: {log_path}")
 
+    write_paraview = (
+        settings["write_paraview"]
+        and case["controller_type"] == "fourier_envelope_mpc"
+    )
     environment = os.environ.copy()
     for name in OBSOLETE_ENVIRONMENT_VARIABLES:
         environment.pop(name, None)
@@ -241,7 +245,7 @@ def run_case(case, campaign_directory, settings):
         "KRATOS_FSI_RUN_OUTPUT_DIRECTORY": str(run_directory.resolve()),
         "KRATOS_FSI_END_TIME": str(END_TIME),
         "KRATOS_FSI_OUTPUT_INTERVAL": str(OUTPUT_DT),
-        "KRATOS_FSI_WRITE_PARAVIEW": "1" if settings["write_paraview"] else "0",
+        "KRATOS_FSI_WRITE_PARAVIEW": "1" if write_paraview else "0",
         "KRATOS_FSI_ACTUATOR_AMPLITUDE": "0.0",
         "KRATOS_FSI_ACTUATOR_FREQUENCY": "0.0",
         "KRATOS_FSI_ACTUATOR_PHASE": "0.0",
@@ -291,7 +295,7 @@ def run_case(case, campaign_directory, settings):
         "initial_kick_value": KICK_VALUE,
         "initial_kick_end_time": KICK_END_TIME,
         "mpc_activation_time": ACTIVATION_TIME,
-        "paraview": settings["write_paraview"],
+        "paraview": write_paraview,
         "artifact_sha256": sha256_file(settings["artifact_path"]),
         "created_at": datetime.now().isoformat(timespec="seconds"),
     }
@@ -464,7 +468,10 @@ def audit_experiment(campaign_directory):
             "initial_kick": {"value": KICK_VALUE, "start": 0.0, "end": KICK_END_TIME},
             "passive_interval": [KICK_END_TIME, ACTIVATION_TIME],
             "controlled_interval": [ACTIVATION_TIME, END_TIME],
-            "paraview": all(case_data.get("paraview", False) for case_data in data.values()),
+            "paraview": {
+                label: case_data.get("paraview", False)
+                for label, case_data in data.items()
+            },
             "regrowth_definition": (
                 "first later rolling-1s RMS at least 10% above the minimum and "
                 "remaining above that threshold for 1 s"
