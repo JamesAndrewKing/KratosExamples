@@ -30,4 +30,6 @@ The active runtime remains in the parent directory:
 - `fsi2_fourier_envelope_mpc_controller.py`
 - `run_amplitude_frequency_mpc_experiment.py`
 - `submit_euler_fourier_envelope_mpc.slurm`
-
+- `fsi2_local_handoff_lqr_controller.py`
+- `run_local_handoff_lqr_pilot.py`
+- `submit_euler_local_handoff_lqr.slurm`

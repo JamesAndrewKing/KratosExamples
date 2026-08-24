@@ -118,6 +118,15 @@ def AddCylinderActuatorProcess(project_parameters, output_directory):
             "mpc_initial_kick_end_time": ReadFloatEnvironmentVariable(
                 "KRATOS_FSI_MPC_INITIAL_KICK_END_TIME", 0.0),
         })
+    elif controller_type == "local_handoff_lqr":
+        controller_settings.update({
+            "local_controller_file_name": os.environ.get(
+                "KRATOS_FSI_LOCAL_CONTROLLER_FILE", ""),
+            "local_controller_log_file_name": str(
+                output_directory / "local_lqr_timeseries.csv"),
+            "local_controller_activation_time": ReadFloatEnvironmentVariable(
+                "KRATOS_FSI_LOCAL_CONTROLLER_ACTIVATION_TIME", 3.0),
+        })
     else:
         raise ValueError(f'Unsupported KRATOS_FSI_CONTROLLER_TYPE "{controller_type}".')
 
