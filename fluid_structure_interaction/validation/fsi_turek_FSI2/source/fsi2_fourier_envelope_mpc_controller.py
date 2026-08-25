@@ -245,6 +245,11 @@ class AmplitudeFrequencyMpc:
             raise ValueError("Move-block duration must be a multiple of internal_step.")
         self.guess = [0.0] * (2 * self.blocks)
         self.update_count = 0
+        self.additional_terminal_objective = None
+
+    def set_additional_terminal_objective(self, objective):
+        """Add a differentiable terminal objective without changing MPC mechanics."""
+        self.additional_terminal_objective = objective
 
     def control(self, eta, theta, parameters):
         decision = self._project(self.guess, parameters)
@@ -376,7 +381,10 @@ class AmplitudeFrequencyMpc:
             for _ in range(self.steps_per_block):
                 cost += self.internal_step * self._stage_cost(state, rate)
                 state = self._rk4_state_step(state, rate, self.internal_step)
-        return cost + self.terminal_weight * self.output.cost(state)
+        cost += self.terminal_weight * self.output.cost(state)
+        if self.additional_terminal_objective is not None:
+            cost += self.additional_terminal_objective.cost(state)
+        return cost
 
     def _objective_gradient(self, eta, theta, parameters, decision):
         state = eta[:] + [theta] + parameters[:]
@@ -418,6 +426,14 @@ class AmplitudeFrequencyMpc:
         for j in range(len(decision)):
             gradient[j] += self.terminal_weight * sum(
                 terminal_gradient[i] * sensitivity[i][j] for i in range(5))
+        if self.additional_terminal_objective is not None:
+            auxiliary_cost, auxiliary_gradient = \
+                self.additional_terminal_objective.cost_gradient(state)
+            cost += auxiliary_cost
+            for j in range(len(decision)):
+                gradient[j] += sum(
+                    auxiliary_gradient[i] * sensitivity[i][j]
+                    for i in range(5))
         return cost, gradient
 
     def _stage_cost(self, state, rate):
