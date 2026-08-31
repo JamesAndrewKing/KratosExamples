@@ -13,70 +13,6 @@ except ImportError:  # ROM and optimizer tests do not require Kratos.
     KratosMultiphysics = None
 
 
-FORMAT_VERSION = 4
-PARAMETER_COORDINATES = ["amplitude", "omega_rad_s"]
-OBSOLETE_QUADRATURE_KEYS = {
-    "envelope_bound",
-    "envelope_rate_bound",
-    "envelope_weight",
-    "rate_weight",
-    "carrier_frequency_hz",
-}
-
-
-def validate_artifact_schema(data):
-    """Reject legacy quadrature exports before constructing online objects."""
-    format_version = int(data.get("format_version", 0))
-    if format_version < FORMAT_VERSION:
-        raise ValueError(
-            f"Amplitude-frequency MPC requires format_version >= {FORMAT_VERSION}; "
-            f"received {format_version}. The artifact is likely a legacy quadrature export."
-        )
-    coordinates = data.get("parameter_coordinates")
-    if coordinates != PARAMETER_COORDINATES:
-        raise ValueError(
-            "Amplitude-frequency MPC requires parameter_coordinates "
-            f"{PARAMETER_COORDINATES}; received {coordinates!r}."
-        )
-    obsolete = sorted(OBSOLETE_QUADRATURE_KEYS.intersection(data))
-    if obsolete:
-        raise ValueError(
-            "Amplitude-frequency artifact contains obsolete quadrature settings: "
-            + ", ".join(obsolete)
-        )
-
-    required_vectors = [
-        "parameter_reference",
-        "parameter_lower",
-        "parameter_upper",
-        "parameter_rate_bound",
-        "parameter_weights",
-        "rate_weights",
-    ]
-    for name in required_vectors:
-        values = _vector(data[name])
-        if len(values) != 2 or not all(math.isfinite(value) for value in values):
-            raise ValueError(f"{name} must contain two finite values.")
-
-    lower = _vector(data["parameter_lower"])
-    upper = _vector(data["parameter_upper"])
-    reference = _vector(data["parameter_reference"])
-    rate_bound = _vector(data["parameter_rate_bound"])
-    if any(lower[i] >= upper[i] for i in range(2)):
-        raise ValueError("Each parameter lower bound must be below its upper bound.")
-    if any(not lower[i] <= reference[i] <= upper[i] for i in range(2)):
-        raise ValueError("parameter_reference must lie inside the parameter bounds.")
-    if any(value <= 0.0 for value in rate_bound):
-        raise ValueError("parameter_rate_bound entries must be positive.")
-
-    for name in [
-            "control_interval", "internal_step", "move_block_duration",
-            "prediction_horizon", "terminal_weight"]:
-        value = float(data[name])
-        if not math.isfinite(value) or value <= 0.0:
-            raise ValueError(f"{name} must be a positive finite value.")
-
-
 class FourierEnvelopeRom:
     """Evaluate a pretransformed Fourier-Legendre ROM and its Jacobian."""
 
@@ -109,12 +45,12 @@ class FourierEnvelopeRom:
                 harmonic_blocks.append(delta_blocks)
             self.tensor.append(harmonic_blocks)
 
-    def evaluate(self, eta, theta, parameters):
+    def evaluate(self, eta, theta, envelope):
         eta_basis = _legendre_product_values(
             eta, self.eta_exponents, self.eta_center, self.eta_scale,
             self.feature_limit)
         delta_basis = _legendre_product_values(
-            parameters, self.delta_exponents, self.delta_center, self.delta_scale,
+            envelope, self.delta_exponents, self.delta_center, self.delta_scale,
             self.feature_limit)
         fourier = _fourier_basis(theta, self.harmonics)[0]
         values = []
@@ -129,12 +65,12 @@ class FourierEnvelopeRom:
             values.append(value)
         return values
 
-    def evaluate_with_jacobian(self, eta, theta, parameters):
+    def evaluate_with_jacobian(self, eta, theta, envelope):
         eta_basis, eta_derivatives = _legendre_product_basis(
             eta, self.eta_exponents, self.eta_center, self.eta_scale,
             self.feature_limit)
         delta_basis, delta_derivatives = _legendre_product_basis(
-            parameters, self.delta_exponents, self.delta_center, self.delta_scale,
+            envelope, self.delta_exponents, self.delta_center, self.delta_scale,
             self.feature_limit)
         fourier, fourier_derivative = _fourier_basis(theta, self.harmonics)
 
@@ -146,24 +82,24 @@ class FourierEnvelopeRom:
             value = 0.0
             d_eta = [0.0] * len(eta)
             d_theta = 0.0
-            d_delta = [0.0] * len(parameters)
+            d_delta = [0.0] * len(envelope)
             for h, delta_blocks in enumerate(output_blocks):
                 harmonic_value = 0.0
                 harmonic_eta = [0.0] * len(eta)
-                harmonic_delta = [0.0] * len(parameters)
+                harmonic_delta = [0.0] * len(envelope)
                 for d, eta_coefficients in enumerate(delta_blocks):
                     eta_value = _dot(eta_coefficients, eta_basis)
                     harmonic_value += delta_basis[d] * eta_value
                     for j in range(len(eta)):
                         harmonic_eta[j] += delta_basis[d] * _dot(
                             eta_coefficients, eta_derivatives[j])
-                    for j in range(len(parameters)):
+                    for j in range(len(envelope)):
                         harmonic_delta[j] += delta_derivatives[j][d] * eta_value
                 value += fourier[h] * harmonic_value
                 d_theta += fourier_derivative[h] * harmonic_value
                 for j in range(len(eta)):
                     d_eta[j] += fourier[h] * harmonic_eta[j]
-                for j in range(len(parameters)):
+                for j in range(len(envelope)):
                     d_delta[j] += fourier[h] * harmonic_delta[j]
             values.append(value)
             jac_eta.append(d_eta)
@@ -172,66 +108,60 @@ class FourierEnvelopeRom:
         return values, jac_eta, jac_theta, jac_delta
 
 
-class ParameterizedOutputMap:
-    """Map (eta, phase, amplitude, frequency) to normalized probe outputs."""
+class EnvelopeOutputMap:
+    """Map reduced coordinates to the current normalized probe outputs."""
 
     def __init__(self, data):
-        self.mapping = FourierEnvelopeRom({
-            "dynamics_coefficients": data["output_coefficients"],
-            "eta_exponents": data["output_eta_exponents"],
-            "delta_exponents": data["output_delta_exponents"],
-            "harmonic_indices": data["output_harmonic_indices"],
-            "eta_center": data["output_eta_center"],
-            "eta_scale": data["output_eta_scale"],
-            "delta_center": data["output_delta_center"],
-            "delta_scale": data["output_delta_scale"],
-            "feature_limit": data["output_feature_limit"],
-        })
+        self.coefficients = data["output_coefficients"]
+        self.exponents = _integer_matrix(data["output_eta_exponents"])
+        self.center = _vector(data["output_eta_center"])
+        self.scale = _vector(data["output_eta_scale"])
+        self.feature_limit = float(data["output_feature_limit"])
         self.target = _vector(data["output_target"])
         self.weights = _vector(data["output_weights"])
         self.names = data["output_names"]
-        if not (len(self.mapping.coefficients) == len(self.target) == len(self.weights)):
+        if not (len(self.coefficients) == len(self.target) == len(self.weights)):
             raise ValueError("Output coefficients, target, and weights are incompatible.")
 
-    def evaluate(self, eta, theta, parameters):
-        return self.mapping.evaluate(eta, theta, parameters)
+    def evaluate(self, eta):
+        basis, _ = _legendre_product_basis(
+            eta, self.exponents, self.center, self.scale, self.feature_limit)
+        return [_dot(row, basis) for row in self.coefficients]
 
-    def cost(self, state):
-        output = self.evaluate(state[:2], state[2], state[3:5])
+    def cost(self, eta):
+        output = self.evaluate(eta)
         return sum(self.weights[i] * (output[i] - self.target[i]) ** 2
                    for i in range(len(output)))
 
-    def cost_gradient(self, state):
-        output, jac_eta, jac_theta, jac_delta = self.mapping.evaluate_with_jacobian(
-            state[:2], state[2], state[3:5])
-        jacobian = [jac_eta[i] + [jac_theta[i]] + jac_delta[i]
-                    for i in range(len(output))]
+    def cost_gradient(self, eta):
+        basis, derivatives = _legendre_product_basis(
+            eta, self.exponents, self.center, self.scale, self.feature_limit)
+        output = [_dot(row, basis) for row in self.coefficients]
+        jacobian = [[_dot(row, derivatives[j]) for j in range(len(eta))]
+                    for row in self.coefficients]
         error = [output[i] - self.target[i] for i in range(len(output))]
         cost = sum(self.weights[i] * error[i] ** 2 for i in range(len(output)))
         gradient = [2.0 * sum(
             self.weights[i] * error[i] * jacobian[i][j]
-            for i in range(len(output))) for j in range(5)]
+            for i in range(len(output))) for j in range(len(eta))]
         return cost, gradient
 
 
-class AmplitudeFrequencyMpc:
-    """Warm-started (amplitude, frequency)-rate MPC with RK4 sensitivities."""
+class EnvelopeMpc:
+    """Warm-started envelope-rate MPC with exact RK4 sensitivities."""
 
     def __init__(self, rom, output, data):
         self.rom = rom
         self.output = output
+        self.omega = 2.0 * math.pi * float(data["carrier_frequency_hz"])
         self.control_interval = float(data["control_interval"])
         self.internal_step = float(data["internal_step"])
         self.block_duration = float(data["move_block_duration"])
         self.horizon = float(data["prediction_horizon"])
-        self.parameter_reference = _vector(data["parameter_reference"])
-        self.parameter_lower = _vector(data["parameter_lower"])
-        self.parameter_upper = _vector(data["parameter_upper"])
-        self.rate_bound = _vector(data["parameter_rate_bound"])
-        self.parameter_weights = _vector(data["parameter_weights"])
-        self.rate_weights = _vector(data["rate_weights"])
-        self.parameter_scale = [self.parameter_upper[i] - self.parameter_lower[i]
-                                for i in range(2)]
+        self.envelope_bound = float(data["envelope_bound"])
+        self.rate_bound = float(data["envelope_rate_bound"])
+        self.envelope_weight = float(data["envelope_weight"])
+        self.rate_weight = float(data["rate_weight"])
         self.terminal_weight = float(data["terminal_weight"])
         self.optimizer_iterations = int(data["optimizer_iterations"])
         self.blocks = round(self.horizon / self.block_duration)
@@ -245,20 +175,15 @@ class AmplitudeFrequencyMpc:
             raise ValueError("Move-block duration must be a multiple of internal_step.")
         self.guess = [0.0] * (2 * self.blocks)
         self.update_count = 0
-        self.additional_terminal_objective = None
 
-    def set_additional_terminal_objective(self, objective):
-        """Add a differentiable terminal objective without changing MPC mechanics."""
-        self.additional_terminal_objective = objective
-
-    def control(self, eta, theta, parameters):
-        decision = self._project(self.guess, parameters)
-        best, gradient = self._objective_gradient(eta, theta, parameters, decision)
+    def control(self, eta, theta, envelope):
+        decision = self._project(self.guess, envelope)
+        best, gradient = self._objective_gradient(eta, theta, envelope, decision)
         inverse_hessian = _identity(len(decision))
         iterations = 0
         for iterations in range(1, self.optimizer_iterations + 1):
             projected = self._project(
-                [decision[i] - gradient[i] for i in range(len(decision))], parameters)
+                [decision[i] - gradient[i] for i in range(len(decision))], envelope)
             projected_gradient = [decision[i] - projected[i]
                                   for i in range(len(decision))]
             if max(abs(value) for value in projected_gradient) < 1e-7:
@@ -274,13 +199,13 @@ class AmplitudeFrequencyMpc:
             for _ in range(12):
                 trial = self._project(
                     [decision[i] + step * direction[i]
-                     for i in range(len(decision))], parameters)
-                value = self._objective(eta, theta, parameters, trial)
+                     for i in range(len(decision))], envelope)
+                value = self._objective(eta, theta, envelope, trial)
                 displacement = [trial[i] - decision[i] for i in range(len(decision))]
                 slope = _dot(gradient, displacement)
                 if slope < 0.0 and value <= best + 1e-4 * slope:
                     new_cost, new_gradient = self._objective_gradient(
-                        eta, theta, parameters, trial)
+                        eta, theta, envelope, trial)
                     change = [new_gradient[i] - gradient[i]
                               for i in range(len(decision))]
                     curvature = _dot(displacement, change)
@@ -308,22 +233,21 @@ class AmplitudeFrequencyMpc:
 
     def _rhs(self, state, rate):
         return self.rom.evaluate(state[:2], state[2], state[3:5]) + [
-            state[4], rate[0], rate[1]]
+            self.omega, rate[0], rate[1]]
 
     def _rhs_with_jacobian(self, state, rate):
         eta = state[:2]
         theta = state[2]
-        parameters = state[3:5]
+        envelope = state[3:5]
         value, jac_eta, jac_theta, jac_delta = self.rom.evaluate_with_jacobian(
-            eta, theta, parameters)
-        rhs = value + [parameters[1], rate[0], rate[1]]
+            eta, theta, envelope)
+        rhs = value + [self.omega, rate[0], rate[1]]
         jac_state = [[0.0] * 5 for _ in range(5)]
         jac_rate = [[0.0] * 2 for _ in range(5)]
         for i in range(2):
             jac_state[i][:2] = jac_eta[i]
             jac_state[i][2] = jac_theta[i]
             jac_state[i][3:5] = jac_delta[i]
-        jac_state[2][4] = 1.0
         jac_rate[3][0] = 1.0
         jac_rate[4][1] = 1.0
         return rhs, jac_state, jac_rate
@@ -373,46 +297,39 @@ class AmplitudeFrequencyMpc:
             k1[i] + 2.0 * k2[i] + 2.0 * k3[i] + k4[i]) / 6.0
                 for i in range(5)]
 
-    def _objective(self, eta, theta, parameters, decision):
-        state = eta[:] + [theta] + parameters[:]
+    def _objective(self, eta, theta, envelope, decision):
+        state = eta[:] + [theta] + envelope[:]
         cost = 0.0
         for block in range(self.blocks):
             rate = decision[2 * block:2 * block + 2]
             for _ in range(self.steps_per_block):
                 cost += self.internal_step * self._stage_cost(state, rate)
                 state = self._rk4_state_step(state, rate, self.internal_step)
-        cost += self.terminal_weight * self.output.cost(state)
-        if self.additional_terminal_objective is not None:
-            cost += self.additional_terminal_objective.cost(state)
-        return cost
+        return cost + self.terminal_weight * self.output.cost(state[:2])
 
-    def _objective_gradient(self, eta, theta, parameters, decision):
-        state = eta[:] + [theta] + parameters[:]
+    def _objective_gradient(self, eta, theta, envelope, decision):
+        state = eta[:] + [theta] + envelope[:]
         sensitivity = [[0.0] * len(decision) for _ in range(5)]
         gradient = [0.0] * len(decision)
         cost = 0.0
         for block in range(self.blocks):
             rate = decision[2 * block:2 * block + 2]
             for _ in range(self.steps_per_block):
-                output_cost, output_gradient = self.output.cost_gradient(state)
+                output_cost, output_gradient = self.output.cost_gradient(state[:2])
                 cost += self.internal_step * (
                     output_cost
-                    + sum(self.parameter_weights[j] * (
-                        (state[3 + j] - self.parameter_reference[j])
-                        / self.parameter_scale[j]) ** 2 for j in range(2))
-                    + sum(self.rate_weights[j] * (rate[j] / self.rate_bound[j]) ** 2
-                          for j in range(2)))
-                state_gradient = output_gradient[:]
-                for j in range(2):
-                    state_gradient[3 + j] += 2.0 * self.parameter_weights[j] * (
-                        state[3 + j] - self.parameter_reference[j]) \
-                        / self.parameter_scale[j] ** 2
+                    + self.envelope_weight * _norm_squared(state[3:5])
+                    / self.envelope_bound ** 2
+                    + self.rate_weight * _norm_squared(rate) / self.rate_bound ** 2)
+                state_gradient = output_gradient + [0.0] + [
+                    2.0 * self.envelope_weight * state[3 + j]
+                    / self.envelope_bound ** 2 for j in range(2)]
                 for j in range(len(decision)):
                     gradient[j] += self.internal_step * sum(
                         state_gradient[i] * sensitivity[i][j] for i in range(5))
                 for j in range(2):
                     gradient[2 * block + j] += self.internal_step * (
-                        2.0 * self.rate_weights[j] * rate[j] / self.rate_bound[j] ** 2)
+                        2.0 * self.rate_weight * rate[j] / self.rate_bound ** 2)
 
                 state, jac_state, jac_rate = self._rk4_step(
                     state, rate, self.internal_step)
@@ -421,49 +338,34 @@ class AmplitudeFrequencyMpc:
                     for j in range(2):
                         sensitivity[i][2 * block + j] += jac_rate[i][j]
 
-        terminal_cost, terminal_gradient = self.output.cost_gradient(state)
+        terminal_cost, terminal_gradient = self.output.cost_gradient(state[:2])
         cost += self.terminal_weight * terminal_cost
         for j in range(len(decision)):
             gradient[j] += self.terminal_weight * sum(
-                terminal_gradient[i] * sensitivity[i][j] for i in range(5))
-        if self.additional_terminal_objective is not None:
-            auxiliary_cost, auxiliary_gradient = \
-                self.additional_terminal_objective.cost_gradient(state)
-            cost += auxiliary_cost
-            for j in range(len(decision)):
-                gradient[j] += sum(
-                    auxiliary_gradient[i] * sensitivity[i][j]
-                    for i in range(5))
+                terminal_gradient[i] * sensitivity[i][j] for i in range(2))
         return cost, gradient
 
     def _stage_cost(self, state, rate):
-        return (self.output.cost(state)
-                + sum(self.parameter_weights[j] * (
-                    (state[3 + j] - self.parameter_reference[j])
-                    / self.parameter_scale[j]) ** 2 for j in range(2))
-                + sum(self.rate_weights[j] * (rate[j] / self.rate_bound[j]) ** 2
-                      for j in range(2)))
+        return (self.output.cost(state[:2])
+                + self.envelope_weight * _norm_squared(state[3:5])
+                / self.envelope_bound ** 2
+                + self.rate_weight * _norm_squared(rate) / self.rate_bound ** 2)
 
-    def _project(self, decision, initial_parameters):
+    def _project(self, decision, initial_envelope):
         projected = []
-        parameters = initial_parameters[:]
+        envelope = initial_envelope[:]
         for block in range(self.blocks):
-            rate = [_clip_to_interval(decision[2 * block + i],
-                                      -self.rate_bound[i], self.rate_bound[i])
-                    for i in range(2)]
-            endpoint = [_clip_to_interval(
-                parameters[i] + self.block_duration * rate[i],
-                self.parameter_lower[i], self.parameter_upper[i])
-                for i in range(2)]
-            rate = [(endpoint[i] - parameters[i]) / self.block_duration
-                    for i in range(2)]
+            rate = _project_ball(decision[2 * block:2 * block + 2], self.rate_bound)
+            endpoint = [envelope[i] + self.block_duration * rate[i] for i in range(2)]
+            endpoint = _project_ball(endpoint, self.envelope_bound)
+            rate = [(endpoint[i] - envelope[i]) / self.block_duration for i in range(2)]
             projected.extend(rate)
-            parameters = endpoint
+            envelope = endpoint
         return projected
 
 
 class FourierEnvelopeMpcController:
-    """Kratos bridge: probe history -> eta -> (A, Omega) MPC -> actuator."""
+    """Kratos bridge: probe history -> eta -> envelope MPC -> actuator value."""
 
     SAMPLE_POINTS = {
         "x_0_30": (0.30, 0.20),
@@ -477,14 +379,13 @@ class FourierEnvelopeMpcController:
             raise RuntimeError("FourierEnvelopeMpcController must run inside Kratos.")
         with Path(settings["rom_file_name"].GetString()).open() as input_file:
             data = json.load(input_file)
-        validate_artifact_schema(data)
         if data.get("controller_type") != "fourier_envelope_mpc":
             raise ValueError("The selected ROM is not a Fourier-envelope controller artifact.")
 
         self.model = model
         self.rom = FourierEnvelopeRom(data)
-        self.output = ParameterizedOutputMap(data)
-        self.mpc = AmplitudeFrequencyMpc(self.rom, self.output, data)
+        self.output = EnvelopeOutputMap(data)
+        self.mpc = EnvelopeMpc(self.rom, self.output, data)
         self.observable_names = data["observable_names"]
         self.observable_scale = _vector(data["observable_scale"])
         self.delay_basis = data["delay_basis"]
@@ -494,14 +395,14 @@ class FourierEnvelopeMpcController:
         history_length = (self.delay_count - 1) * self.shift_steps + 1
         self.history = deque(maxlen=history_length)
 
+        self.omega = self.mpc.omega
         self.phase_offset = float(data.get("carrier_phase", 0.0))
         self.activation_time = settings["mpc_activation_time"].GetDouble()
         self.initial_kick_value = settings["mpc_initial_kick_value"].GetDouble()
         self.initial_kick_end_time = settings["mpc_initial_kick_end_time"].GetDouble()
-        self.parameters = self.mpc.parameter_reference[:]
-        self.parameter_rate = [0.0, 0.0]
-        self.parameter_time = self.activation_time
-        self.phase = self.parameters[1] * self.activation_time + self.phase_offset
+        self.envelope = [0.0, 0.0]
+        self.envelope_rate = [0.0, 0.0]
+        self.envelope_time = self.activation_time
         self.current_control = 0.0
         self.next_sample_time = 0.0
         self.next_control_time = self.activation_time
@@ -513,11 +414,10 @@ class FourierEnvelopeMpcController:
         self.output_file = output_path.open("w", newline="")
         self.writer = csv.writer(self.output_file)
         self.writer.writerow([
-            "time", "eta_1", "eta_2", "theta", "A",
-            "Omega", "frequency_hz", "A_dot", "Omega_dot",
-            "frequency_dot_hz_s", "control_u",
+            "time", "eta_1", "eta_2", "carrier_theta", "envelope_ac",
+            "envelope_as", "envelope_ac_dot", "envelope_as_dot", "control_u",
             "objective", "solve_time_seconds", "optimizer_iterations",
-            "output_error"
+            "output_error", "envelope_norm", "envelope_rate_norm"
         ])
         self._append_observation()
         self.next_sample_time = self.sample_interval
@@ -538,37 +438,35 @@ class FourierEnvelopeMpcController:
                                     else 0.0)
             return self.current_control
 
-        self._advance_parameters(current_time)
+        self._advance_envelope(current_time)
+        theta = self.omega * current_time + self.phase_offset
         if len(self.history) < self.history.maxlen:
-            self.current_control = self._physical_control()
+            self.current_control = self._physical_control(theta)
             return self.current_control
 
         if current_time + 1e-10 >= self.next_control_time:
             eta = self._reduced_state()
             start = time.perf_counter()
             rate, objective, iterations = self.mpc.control(
-                eta, self.phase, self.parameters)
+                eta, theta, self.envelope)
             elapsed = time.perf_counter() - start
-            self.parameter_rate = rate
+            self.envelope_rate = rate
             while self.next_control_time <= current_time + 1e-10:
                 self.next_control_time += self.mpc.control_interval
 
-            state = eta + [self.phase] + self.parameters
-            output_error = math.sqrt(self.output.cost(state))
+            output_error = math.sqrt(self.output.cost(eta))
             self.writer.writerow([
                 f"{current_time:.12g}", *[f"{value:.12g}" for value in eta],
-                f"{self.phase:.12g}", f"{self.parameters[0]:.12g}",
-                f"{self.parameters[1]:.12g}",
-                f"{self.parameters[1] / (2.0 * math.pi):.12g}",
-                f"{self.parameter_rate[0]:.12g}",
-                f"{self.parameter_rate[1]:.12g}",
-                f"{self.parameter_rate[1] / (2.0 * math.pi):.12g}",
-                f"{self._physical_control():.12g}", f"{objective:.12g}",
+                f"{theta:.12g}", *[f"{value:.12g}" for value in self.envelope],
+                *[f"{value:.12g}" for value in self.envelope_rate],
+                f"{self._physical_control(theta):.12g}", f"{objective:.12g}",
                 f"{elapsed:.12g}", iterations, f"{output_error:.12g}",
+                f"{math.sqrt(_norm_squared(self.envelope)):.12g}",
+                f"{math.sqrt(_norm_squared(self.envelope_rate)):.12g}"
             ])
             self.output_file.flush()
 
-        self.current_control = self._physical_control()
+        self.current_control = self._physical_control(theta)
         return self.current_control
 
     def Finalize(self):
@@ -576,20 +474,17 @@ class FourierEnvelopeMpcController:
             self.output_file.close()
             self.output_file = None
 
-    def _advance_parameters(self, current_time):
-        if current_time <= self.parameter_time:
+    def _advance_envelope(self, current_time):
+        if current_time <= self.envelope_time:
             return
-        dt = current_time - self.parameter_time
-        self.phase += (self.parameters[1] * dt
-                       + 0.5 * self.parameter_rate[1] * dt * dt)
-        self.parameters = [_clip_to_interval(
-            self.parameters[i] + dt * self.parameter_rate[i],
-            self.mpc.parameter_lower[i], self.mpc.parameter_upper[i])
-            for i in range(2)]
-        self.parameter_time = current_time
+        dt = current_time - self.envelope_time
+        self.envelope = [self.envelope[i] + dt * self.envelope_rate[i]
+                         for i in range(2)]
+        self.envelope = _project_ball(self.envelope, self.mpc.envelope_bound)
+        self.envelope_time = current_time
 
-    def _physical_control(self):
-        return self.parameters[0] * math.cos(self.phase)
+    def _physical_control(self, theta):
+        return self.envelope[0] * math.cos(theta) + self.envelope[1] * math.sin(theta)
 
     def _append_observation(self):
         observation = []
@@ -636,9 +531,8 @@ class FourierEnvelopeMpcController:
 
 def validate_export(data):
     """Check exported basis ordering and analytic derivatives."""
-    validate_artifact_schema(data)
     rom = FourierEnvelopeRom(data)
-    output = ParameterizedOutputMap(data)
+    output = EnvelopeOutputMap(data)
     reference = data["validation"]
     eta_columns = _columns(reference["eta"])
     delta_columns = _columns(reference["delta"])
@@ -648,18 +542,18 @@ def validate_export(data):
     max_dynamics_error = 0.0
     max_output_error = 0.0
     max_jacobian_error = 0.0
-    for eta, parameters, angle, expected_dynamics, expected_output in zip(
+    for eta, envelope, angle, expected_dynamics, expected_output in zip(
             eta_columns, delta_columns, theta, dynamics_columns, output_columns):
         value, jac_eta, jac_theta, jac_delta = rom.evaluate_with_jacobian(
-            eta, angle, parameters)
+            eta, angle, envelope)
         max_dynamics_error = max(max_dynamics_error, max(
             abs(value[i] - expected_dynamics[i]) for i in range(len(value))))
-        predicted_output = output.evaluate(eta, angle, parameters)
+        predicted_output = output.evaluate(eta)
         max_output_error = max(max_output_error, max(
             abs(predicted_output[i] - expected_output[i])
             for i in range(len(predicted_output))))
         step = 1e-6
-        variables = eta + [angle] + parameters
+        variables = eta + [angle] + envelope
         analytic = [row[:] for row in jac_eta]
         for i in range(len(value)):
             analytic[i].append(jac_theta[i])
@@ -678,89 +572,25 @@ def validate_export(data):
     return max_dynamics_error, max_output_error, max_jacobian_error
 
 
-def validate_control_contract(data):
-    """Exercise the amplitude-frequency state, rate, phase, and output contracts."""
-    validate_artifact_schema(data)
-    rom = FourierEnvelopeRom(data)
-    output = ParameterizedOutputMap(data)
-    mpc = AmplitudeFrequencyMpc(rom, output, data)
-
-    parameters = [
-        0.5 * (mpc.parameter_lower[i] + mpc.parameter_upper[i])
-        for i in range(2)
-    ]
-    rate = [0.37 * mpc.rate_bound[0], -0.61 * mpc.rate_bound[1]]
-    eta = [0.0, 0.0]
-    theta = 0.37
-    dt = 0.137
-    next_state = mpc.step(eta + [theta] + parameters, rate, dt)
-    expected_theta = theta + parameters[1] * dt + 0.5 * rate[1] * dt * dt
-    phase_error = abs(next_state[2] - expected_theta)
-
-    expected_parameters = [parameters[i] + rate[i] * dt for i in range(2)]
-    parameter_error = max(
-        abs(next_state[3 + i] - expected_parameters[i]) for i in range(2)
-    )
-    control = next_state[3] * math.cos(next_state[2])
-    identity_error = abs(control - expected_parameters[0] * math.cos(expected_theta))
-
-    projected = mpc._project([10.0, -10.0] * mpc.blocks, parameters)
-    projected_parameters = parameters[:]
-    max_rate_fraction = 0.0
-    for block in range(mpc.blocks):
-        block_rate = projected[2 * block:2 * block + 2]
-        max_rate_fraction = max(max_rate_fraction, max(
-            abs(block_rate[i]) / mpc.rate_bound[i] for i in range(2)
-        ))
-        projected_parameters = [
-            projected_parameters[i] + mpc.block_duration * block_rate[i]
-            for i in range(2)
-        ]
-        if any(projected_parameters[i] < mpc.parameter_lower[i] - 1e-12
-               or projected_parameters[i] > mpc.parameter_upper[i] + 1e-12
-               for i in range(2)):
-            raise ValueError("Projected MPC decision violates parameter bounds.")
-
-    if phase_error > 1e-11:
-        raise ValueError(f"Changing-frequency phase propagation error is {phase_error:.3e}.")
-    if parameter_error > 1e-12:
-        raise ValueError(f"Parameter propagation error is {parameter_error:.3e}.")
-    if identity_error > 1e-12:
-        raise ValueError(f"Physical-control identity error is {identity_error:.3e}.")
-    if max_rate_fraction > 1.0 + 1e-12:
-        raise ValueError("Projected MPC decision violates parameter-rate bounds.")
-
-    # Ensure the parameterized output map is callable over the same state.
-    output.evaluate(next_state[:2], next_state[2], next_state[3:5])
-    rom.evaluate(next_state[:2], next_state[2], next_state[3:5])
-    return {
-        "phase_error": phase_error,
-        "parameter_error": parameter_error,
-        "control_identity_error": identity_error,
-        "max_projected_rate_fraction": max_rate_fraction,
-    }
-
-
 def benchmark_controller(data, updates=8):
-    validate_artifact_schema(data)
     rom = FourierEnvelopeRom(data)
-    output = ParameterizedOutputMap(data)
-    mpc = AmplitudeFrequencyMpc(rom, output, data)
+    output = EnvelopeOutputMap(data)
+    mpc = EnvelopeMpc(rom, output, data)
     eta = [0.5 * value for value in _vector(data["eta_scale"])]
     theta = 0.0
-    parameters = mpc.parameter_reference[:]
+    envelope = [0.0, 0.0]
     times = []
     for _ in range(updates):
         start = time.perf_counter()
-        rate, _, _ = mpc.control(eta, theta, parameters)
+        rate, _, _ = mpc.control(eta, theta, envelope)
         times.append(time.perf_counter() - start)
-        state = eta + [theta] + parameters
+        state = eta + [theta] + envelope
         remaining = mpc.control_interval
         while remaining > 1e-12:
             dt = min(mpc.internal_step, remaining)
             state = mpc.step(state, rate, dt)
             remaining -= dt
-        eta, theta, parameters = state[:2], state[2], state[3:5]
+        eta, theta, envelope = state[:2], state[2], state[3:5]
     return times
 
 
@@ -855,8 +685,11 @@ def _clip(value, bound):
     return max(-bound, min(bound, value))
 
 
-def _clip_to_interval(value, lower, upper):
-    return max(lower, min(upper, value))
+def _project_ball(vector, radius):
+    norm = math.sqrt(_norm_squared(vector))
+    if norm <= radius or norm == 0.0:
+        return vector[:]
+    return [radius * value / norm for value in vector]
 
 
 def _add(x, dx, scale):
@@ -915,39 +748,9 @@ if __name__ == "__main__":
     with arguments.model.open() as model_file:
         model_data = json.load(model_file)
     errors = validate_export(model_data)
-    if max(errors) > 1e-7:
-        raise RuntimeError(
-            "Export validation exceeded tolerance: "
-            + ", ".join(f"{value:.3e}" for value in errors)
-        )
-    contract = validate_control_contract(model_data)
     print("max export errors: dynamics={:.3e}, output={:.3e}, jacobian={:.3e}".format(
         *errors))
-    print(
-        "control contract: format={}, coordinates={}, phase_error={:.3e}, "
-        "u_identity_error={:.3e}, max_rate_fraction={:.6f}".format(
-            model_data["format_version"], model_data["parameter_coordinates"],
-            contract["phase_error"], contract["control_identity_error"],
-            contract["max_projected_rate_fraction"],
-        )
-    )
-    print(
-        "MPC settings: control_interval={:.6g}s, internal_step={:.6g}s, "
-        "block={:.6g}s, horizon={:.6g}s, A=[{:.6g},{:.6g}], f=[{:.6g},{:.6g}]Hz, "
-        "rates=[{:.6g},{:.6g}]".format(
-            float(model_data["control_interval"]), float(model_data["internal_step"]),
-            float(model_data["move_block_duration"]),
-            float(model_data["prediction_horizon"]),
-            float(model_data["parameter_lower"][0]),
-            float(model_data["parameter_upper"][0]),
-            float(model_data["parameter_lower"][1]) / (2.0 * math.pi),
-            float(model_data["parameter_upper"][1]) / (2.0 * math.pi),
-            float(model_data["parameter_rate_bound"][0]),
-            float(model_data["parameter_rate_bound"][1]) / (2.0 * math.pi),
-        )
-    )
     solve_times = benchmark_controller(model_data, arguments.benchmark_updates)
-    warm_times = solve_times[1:] or solve_times
     print("MPC solve time: first={:.3f}s, median warm={:.3f}s, max={:.3f}s".format(
-        solve_times[0], sorted(warm_times)[len(warm_times) // 2],
+        solve_times[0], sorted(solve_times[1:])[len(solve_times[1:]) // 2],
         max(solve_times)))
