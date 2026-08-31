@@ -126,8 +126,10 @@ def AddCylinderActuatorProcess(project_parameters, output_directory):
                 output_directory / "local_lqr_timeseries.csv"),
             "local_controller_activation_time": ReadFloatEnvironmentVariable(
                 "KRATOS_FSI_LOCAL_CONTROLLER_ACTIVATION_TIME", 3.0),
+            "local_controller_gain_multiplier": ReadFloatEnvironmentVariable(
+                "KRATOS_FSI_LOCAL_CONTROLLER_GAIN_MULTIPLIER", 1.0),
         })
-    elif controller_type == "mpc_local_handoff":
+    elif controller_type in ("mpc_local_handoff", "equilibrium_capture_mpc"):
         controller_settings.update({
             "handoff_controller_file_name": os.environ.get(
                 "KRATOS_FSI_HANDOFF_CONTROLLER_FILE", ""),

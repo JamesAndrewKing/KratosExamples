@@ -98,8 +98,12 @@ def validate_artifact_schema(data):
 class LocalHandoffLaw:
     """Exported normalized LQR, constraints, local chart, and map."""
 
-    def __init__(self, data):
+    def __init__(self, data, feedback_gain_multiplier=1.0):
         validate_artifact_schema(data)
+        self.feedback_gain_multiplier = float(feedback_gain_multiplier)
+        if not math.isfinite(self.feedback_gain_multiplier) \
+                or self.feedback_gain_multiplier <= 0.0:
+            raise ValueError("Local feedback gain multiplier must be positive and finite.")
         self.observable_names = list(data["observable_names"])
         self.observable_scale = _vector(data["observable_scale"])
         self.sample_interval = float(data["sample_interval"])
@@ -140,7 +144,7 @@ class LocalHandoffLaw:
             for i in range(4)
         ] + [envelope[i] / self.state_scale[4 + i] for i in range(2)]
         normalized_rate = [
-            _clip(-value, -1.0, 1.0)
+            _clip(-self.feedback_gain_multiplier * value, -1.0, 1.0)
             for value in _matvec(self.K, normalized_state)
         ]
         rate = [self.input_scale[i] * normalized_rate[i] for i in range(2)]
@@ -206,7 +210,9 @@ class LocalHandoffLqrController:
             raise RuntimeError("LocalHandoffLqrController must run inside Kratos.")
         artifact_path = Path(settings["local_controller_file_name"].GetString())
         data = json.loads(artifact_path.read_text())
-        self.law = LocalHandoffLaw(data)
+        gain_multiplier = settings[
+            "local_controller_gain_multiplier"].GetDouble()
+        self.law = LocalHandoffLaw(data, gain_multiplier)
         self.model = model
         self.activation_time = settings["local_controller_activation_time"].GetDouble()
         self.nodes = self._find_measurement_nodes()
@@ -237,7 +243,8 @@ class LocalHandoffLqrController:
             "envelope_average_rate_relative_c", "envelope_average_rate_relative_s",
             "envelope_peak_rate_relative_c", "envelope_peak_rate_relative_s",
             "envelope_amplitude", "control_u", "predicted_next_radius",
-            "is_update", "engaged", "guard_tripped", "status",
+            "feedback_gain_multiplier", "is_update", "engaged",
+            "guard_tripped", "status",
         ])
         self._append_observation()
         self.next_sample_time = self.law.sample_interval
@@ -395,8 +402,9 @@ class LocalHandoffLqrController:
             f"{self.law.interpolation_peak_rate_factor * self.envelope_rate[1]:.12g}",
             f"{_norm(self.envelope):.12g}",
             f"{self._physical_control(current_time):.12g}",
-            f"{predicted_radius:.12g}", int(is_update), int(self.engaged),
-            int(self.guard_tripped), status,
+            f"{predicted_radius:.12g}",
+            f"{self.law.feedback_gain_multiplier:.12g}", int(is_update),
+            int(self.engaged), int(self.guard_tripped), status,
         ])
         self.output_file.flush()
 

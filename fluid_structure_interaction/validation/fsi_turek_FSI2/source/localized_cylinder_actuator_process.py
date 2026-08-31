@@ -7,7 +7,10 @@ import KratosMultiphysics
 
 from fsi2_fourier_envelope_mpc_controller import FourierEnvelopeMpcController
 from fsi2_local_handoff_lqr_controller import LocalHandoffLqrController
-from fsi2_mpc_handoff_controller import MpcLocalHandoffController
+from fsi2_mpc_handoff_controller import (
+    EquilibriumCaptureMpcController,
+    MpcLocalHandoffController,
+)
 
 
 def Factory(settings, model):
@@ -100,6 +103,7 @@ class LocalizedCylinderActuatorProcess(KratosMultiphysics.Process):
                 "local_controller_file_name" : "",
                 "local_controller_log_file_name" : "local_lqr_timeseries.csv",
                 "local_controller_activation_time" : 3.0,
+                "local_controller_gain_multiplier" : 1.0,
                 "handoff_controller_file_name" : "",
                 "handoff_controller_log_file_name" : "mpc_handoff_timeseries.csv",
                 "interval" : [0.0, "End"]
@@ -296,6 +300,8 @@ class LocalizedCylinderActuatorProcess(KratosMultiphysics.Process):
             return LocalHandoffLqrController(self.model, settings)
         if controller_type == "mpc_local_handoff":
             return MpcLocalHandoffController(self.model, settings)
+        if controller_type == "equilibrium_capture_mpc":
+            return EquilibriumCaptureMpcController(self.model, settings)
         raise ValueError(f'Unsupported actuator controller_type "{controller_type}".')
 
     def _CalculateDirection(self, dx, dy, direction_type):

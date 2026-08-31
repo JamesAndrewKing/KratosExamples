@@ -795,6 +795,63 @@ class MpcLocalHandoffController:
         }
 
 
+class EquilibriumCaptureMpcController(MpcLocalHandoffController):
+    """Run one fixed-deadline capture episode, then coast at zero input."""
+
+    def __init__(self, model, settings):
+        super().__init__(model, settings)
+        self.capture_deadline = self.activation_time + self.mpc.horizon
+
+    def ComputeControl(self, current_time):
+        control = super().ComputeControl(current_time)
+        if self.mode == "coast" and current_time + 1e-10 >= self.next_mpc_time:
+            eta = self._mpc_eta()
+            local_eta = self._local_eta()
+            radius = self.local.local_radius(local_eta)
+            self._write_log(
+                current_time, "coast_observation", eta, local_eta, radius,
+                math.nan, 0.0, 0, math.nan,
+            )
+            while self.next_mpc_time <= current_time + 1e-10:
+                self.next_mpc_time += self.mpc.control_interval
+        return control
+
+    def _mpc_update(self, current_time):
+        eta = self._mpc_eta()
+        local_eta = self._local_eta()
+        radius = self.local.local_radius(local_eta)
+        if self.mpc.deadline_reached:
+            self.parameters[0] = 0.0
+            self.parameter_rate = [0.0, 0.0]
+            self.parameter_time = current_time
+            self.mode = "coast"
+            self.next_mpc_time = current_time + self.mpc.control_interval
+            self._write_log(
+                current_time, "capture_to_coast", eta, local_eta, radius,
+                self.mpc.current_cost, 0.0, 0, math.nan,
+            )
+            return
+
+        start = time.perf_counter()
+        self.mpc.initialize_capture_guess(eta, self.phase, self.parameters)
+        rate, objective, iterations = self.mpc.control(
+            eta, self.phase, self.parameters
+        )
+        elapsed = time.perf_counter() - start
+        self.parameter_rate = rate
+        while self.next_mpc_time <= current_time + 1e-10:
+            self.next_mpc_time += self.mpc.control_interval
+        self._write_log(
+            current_time, "capture_update", eta, local_eta, radius,
+            objective, elapsed, iterations, math.nan,
+        )
+
+    def _physical_control(self, current_time):
+        if self.mode == "coast":
+            return 0.0
+        return super()._physical_control(current_time)
+
+
 def validate_transition_contract(data):
     """Check handoff dwell, actuator continuity, and phase round trips."""
     validate_artifact_schema(data)
