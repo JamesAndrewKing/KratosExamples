@@ -25,11 +25,6 @@ def ReadBooleanEnvironmentVariable(name, default_value):
     return value.lower() not in ("0", "false", "no", "off")
 
 
-def ReadIntEnvironmentVariable(name, default_value):
-    value = os.environ.get(name)
-    return default_value if value is None else int(value)
-
-
 def CreateRunOutputDirectory():
     requested_output_directory = os.environ.get("KRATOS_FSI_RUN_OUTPUT_DIRECTORY")
     if requested_output_directory:
@@ -129,18 +124,6 @@ def AddCylinderActuatorProcess(project_parameters, output_directory):
                     "KRATOS_FSI_MPC_INITIAL_KICK_VALUE", 0.0),
                 "mpc_initial_kick_end_time": ReadFloatEnvironmentVariable(
                     "KRATOS_FSI_MPC_INITIAL_KICK_END_TIME", 0.0),
-                "mpc_control_interval": ReadFloatEnvironmentVariable(
-                    "KRATOS_FSI_MPC_CONTROL_INTERVAL", 0.05),
-                "mpc_prediction_horizon": ReadFloatEnvironmentVariable(
-                    "KRATOS_FSI_MPC_PREDICTION_HORIZON", 1.0),
-                "mpc_control_bound": ReadFloatEnvironmentVariable(
-                    "KRATOS_FSI_MPC_CONTROL_BOUND", 2.0),
-                "mpc_max_control_increment": ReadFloatEnvironmentVariable(
-                    "KRATOS_FSI_MPC_MAX_CONTROL_INCREMENT", 0.05),
-                "mpc_move_blocks": ReadIntEnvironmentVariable(
-                    "KRATOS_FSI_MPC_MOVE_BLOCKS", 20),
-                "mpc_optimizer_iterations": ReadIntEnvironmentVariable(
-                    "KRATOS_FSI_MPC_OPTIMIZER_ITERATIONS", 8),
                 "interval": [0.0, "End"]
             }]
         }

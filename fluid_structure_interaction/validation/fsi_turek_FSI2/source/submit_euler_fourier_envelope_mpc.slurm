@@ -36,7 +36,8 @@ export KRATOS_FSI_OUTPUT_INTERVAL="${KRATOS_FSI_OUTPUT_INTERVAL:-0.01}"
 export KRATOS_FSI_WRITE_PARAVIEW="${KRATOS_FSI_WRITE_PARAVIEW:-0}"
 export KRATOS_FSI_CONTROLLER_TYPE="fourier_envelope_mpc"
 export KRATOS_FSI_ROM_FILE="${KRATOS_FSI_ROM_FILE:-${SCRATCH}/Vortex-Shedding/data/fsi2_fourier_envelope_controller.json}"
-export KRATOS_FSI_MPC_ACTIVATION_TIME="${KRATOS_FSI_MPC_ACTIVATION_TIME:-20.0}"
+export KRATOS_FSI_ROM_SHA256="${KRATOS_FSI_ROM_SHA256:-025cd090af008223b2e3e658056396746901dc304cb1d98384af2541f6269b96}"
+export KRATOS_FSI_MPC_ACTIVATION_TIME="${KRATOS_FSI_MPC_ACTIVATION_TIME:-6.0}"
 export KRATOS_FSI_MPC_INITIAL_KICK_VALUE="${KRATOS_FSI_MPC_INITIAL_KICK_VALUE:-0.4}"
 export KRATOS_FSI_MPC_INITIAL_KICK_END_TIME="${KRATOS_FSI_MPC_INITIAL_KICK_END_TIME:-2.0}"
 
@@ -44,5 +45,15 @@ if [[ ! -f "${KRATOS_FSI_ROM_FILE}" ]]; then
     echo "Missing KRATOS_FSI_ROM_FILE=${KRATOS_FSI_ROM_FILE}" >&2
     exit 2
 fi
+
+actual_sha256="$(sha256sum "${KRATOS_FSI_ROM_FILE}" | awk '{print $1}')"
+if [[ "${actual_sha256}" != "${KRATOS_FSI_ROM_SHA256}" ]]; then
+    echo "Unexpected ROM artifact hash: ${actual_sha256}" >&2
+    echo "Expected: ${KRATOS_FSI_ROM_SHA256}" >&2
+    exit 3
+fi
+
+python3 fsi2_fourier_envelope_mpc_controller.py \
+    "${KRATOS_FSI_ROM_FILE}" --benchmark-updates 1
 
 python3 MainKratos.py

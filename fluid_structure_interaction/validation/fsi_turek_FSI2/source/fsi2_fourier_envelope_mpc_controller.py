@@ -13,6 +13,75 @@ except ImportError:  # ROM and optimizer tests do not require Kratos.
     KratosMultiphysics = None
 
 
+FORMAT_VERSION = 3
+REQUIRED_ARTIFACT_FIELDS = {
+    "carrier_frequency_hz",
+    "carrier_phase",
+    "control_interval",
+    "delay_basis",
+    "delay_count",
+    "delta_center",
+    "delta_exponents",
+    "delta_scale",
+    "dynamics_coefficients",
+    "envelope_bound",
+    "envelope_rate_bound",
+    "envelope_weight",
+    "eta_center",
+    "eta_exponents",
+    "eta_scale",
+    "feature_limit",
+    "harmonic_indices",
+    "internal_step",
+    "move_block_duration",
+    "observable_names",
+    "observable_scale",
+    "optimizer_iterations",
+    "output_coefficients",
+    "output_eta_center",
+    "output_eta_exponents",
+    "output_eta_scale",
+    "output_feature_limit",
+    "output_names",
+    "output_target",
+    "output_weights",
+    "prediction_horizon",
+    "rate_weight",
+    "sample_interval",
+    "shift_steps",
+    "terminal_envelope_weight",
+    "terminal_weight",
+    "validation",
+}
+
+
+def validate_artifact_contract(data):
+    """Require the recovered format-v3 quadrature controller contract."""
+    if data.get("controller_type") != "fourier_envelope_mpc":
+        raise ValueError("Expected controller_type='fourier_envelope_mpc'.")
+    if data.get("format_version") != FORMAT_VERSION:
+        raise ValueError(
+            f"Expected Fourier-envelope artifact format_version={FORMAT_VERSION}, "
+            f"got {data.get('format_version')!r}."
+        )
+    missing = sorted(REQUIRED_ARTIFACT_FIELDS.difference(data))
+    if missing:
+        raise ValueError(
+            "Format-v3 quadrature artifact is missing: " + ", ".join(missing)
+        )
+
+    delta_center = _vector(data["delta_center"])
+    delta_scale = _vector(data["delta_scale"])
+    delta_exponents = _integer_matrix(data["delta_exponents"])
+    if len(delta_center) != 2 or len(delta_scale) != 2 or any(
+            len(exponent) != 2 for exponent in delta_exponents):
+        raise ValueError(
+            "Format-v3 parameters must be the two quadratures envelope_ac/envelope_as."
+        )
+    if len(data["dynamics_coefficients"]) != 2:
+        raise ValueError("Format-v3 controller requires two reduced coordinates.")
+
+
 class FourierEnvelopeRom:
     """Evaluate a pretransformed Fourier-Legendre ROM and its Jacobian."""
 
@@ -163,6 +232,9 @@ class EnvelopeMpc:
         self.envelope_weight = float(data["envelope_weight"])
         self.rate_weight = float(data["rate_weight"])
         self.terminal_weight = float(data["terminal_weight"])
+        self.terminal_envelope_weight = float(
+            data.get("terminal_envelope_weight", 0.0)
+        )
         self.optimizer_iterations = int(data["optimizer_iterations"])
         self.blocks = round(self.horizon / self.block_duration)
         self.steps_per_block = round(self.block_duration / self.internal_step)
@@ -305,7 +377,12 @@ class EnvelopeMpc:
             for _ in range(self.steps_per_block):
                 cost += self.internal_step * self._stage_cost(state, rate)
                 state = self._rk4_state_step(state, rate, self.internal_step)
-        return cost + self.terminal_weight * self.output.cost(state[:2])
+        return (
+            cost
+            + self.terminal_weight * self.output.cost(state[:2])
+            + self.terminal_envelope_weight
+            * _norm_squared(state[3:5]) / self.envelope_bound ** 2
+        )
 
     def _objective_gradient(self, eta, theta, envelope, decision):
         state = eta[:] + [theta] + envelope[:]
@@ -339,10 +416,18 @@ class EnvelopeMpc:
                         sensitivity[i][2 * block + j] += jac_rate[i][j]
 
         terminal_cost, terminal_gradient = self.output.cost_gradient(state[:2])
-        cost += self.terminal_weight * terminal_cost
+        cost += (
+            self.terminal_weight * terminal_cost
+            + self.terminal_envelope_weight
+            * _norm_squared(state[3:5]) / self.envelope_bound ** 2
+        )
         for j in range(len(decision)):
             gradient[j] += self.terminal_weight * sum(
                 terminal_gradient[i] * sensitivity[i][j] for i in range(2))
+            gradient[j] += self.terminal_envelope_weight * sum(
+                2.0 * state[3 + i] * sensitivity[3 + i][j]
+                / self.envelope_bound ** 2 for i in range(2)
+            )
         return cost, gradient
 
     def _stage_cost(self, state, rate):
@@ -379,8 +464,7 @@ class FourierEnvelopeMpcController:
             raise RuntimeError("FourierEnvelopeMpcController must run inside Kratos.")
         with Path(settings["rom_file_name"].GetString()).open() as input_file:
             data = json.load(input_file)
-        if data.get("controller_type") != "fourier_envelope_mpc":
-            raise ValueError("The selected ROM is not a Fourier-envelope controller artifact.")
+        validate_artifact_contract(data)
 
         self.model = model
         self.rom = FourierEnvelopeRom(data)
@@ -531,6 +615,7 @@ class FourierEnvelopeMpcController:
 
 def validate_export(data):
     """Check exported basis ordering and analytic derivatives."""
+    validate_artifact_contract(data)
     rom = FourierEnvelopeRom(data)
     output = EnvelopeOutputMap(data)
     reference = data["validation"]
@@ -751,6 +836,7 @@ if __name__ == "__main__":
     print("max export errors: dynamics={:.3e}, output={:.3e}, jacobian={:.3e}".format(
         *errors))
     solve_times = benchmark_controller(model_data, arguments.benchmark_updates)
+    warm_times = solve_times[1:] or solve_times
     print("MPC solve time: first={:.3f}s, median warm={:.3f}s, max={:.3f}s".format(
-        solve_times[0], sorted(solve_times[1:])[len(solve_times[1:]) // 2],
+        solve_times[0], sorted(warm_times)[len(warm_times) // 2],
         max(solve_times)))

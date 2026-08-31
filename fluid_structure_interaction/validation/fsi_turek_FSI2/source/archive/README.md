@@ -1,7 +1,7 @@
 # Archived FSI2 Control Workflows
 
 These files preserve completed calibration, identification, and controller
-experiments. They are not part of the active amplitude-frequency MPC runtime.
+experiments. They are not part of the active Fourier-envelope MPC runtime.
 Run them only from a matching historical checkout because their imports and
 environment variables reflect the software state used for those campaigns.
 
@@ -28,8 +28,9 @@ The active runtime remains in the parent directory:
 - `MainKratos.py`
 - `localized_cylinder_actuator_process.py`
 - `fsi2_fourier_envelope_mpc_controller.py`
-- `run_amplitude_frequency_mpc_experiment.py`
 - `submit_euler_fourier_envelope_mpc.slurm`
-- `fsi2_local_handoff_lqr_controller.py`
-- `run_local_handoff_lqr_pilot.py`
-- `submit_euler_local_handoff_lqr.slurm`
+
+The superseded amplitude-frequency, local-LQR, and MPC-handoff experiments are
+preserved in Git branch `archive/fsi2-amplitude-frequency-capture-2026-08` at
+commit `10b9589`. They were intentionally removed from the active checkout and
+should be recovered from that branch only when reproducing those experiments.

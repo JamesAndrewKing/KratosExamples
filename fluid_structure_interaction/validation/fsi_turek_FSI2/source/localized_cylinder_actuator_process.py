@@ -5,7 +5,6 @@ from pathlib import Path
 
 import KratosMultiphysics
 
-from fsi2_rom_mpc_controller import RomMpcController
 from fsi2_fourier_envelope_mpc_controller import FourierEnvelopeMpcController
 
 
@@ -96,12 +95,6 @@ class LocalizedCylinderActuatorProcess(KratosMultiphysics.Process):
                 "mpc_activation_time" : 15.0,
                 "mpc_initial_kick_value" : 0.0,
                 "mpc_initial_kick_end_time" : 0.0,
-                "mpc_control_interval" : 0.05,
-                "mpc_prediction_horizon" : 1.0,
-                "mpc_control_bound" : 2.0,
-                "mpc_max_control_increment" : 0.05,
-                "mpc_move_blocks" : 20,
-                "mpc_optimizer_iterations" : 8,
                 "interval" : [0.0, "End"]
             }]
         }""")
@@ -290,8 +283,6 @@ class LocalizedCylinderActuatorProcess(KratosMultiphysics.Process):
             return SinusoidalController(settings)
         if controller_type == "csv":
             return CsvSignalController(settings)
-        if controller_type == "rom_mpc":
-            return RomMpcController(self.model, settings)
         if controller_type == "fourier_envelope_mpc":
             return FourierEnvelopeMpcController(self.model, settings)
         raise ValueError(f'Unsupported actuator controller_type "{controller_type}".')
