@@ -6,6 +6,7 @@ from pathlib import Path
 import KratosMultiphysics
 
 from fsi2_fourier_envelope_mpc_controller import FourierEnvelopeMpcController
+from fsi2_periodic_envelope_feedback_controller import PeriodicEnvelopeFeedbackController
 
 
 def Factory(settings, model):
@@ -285,6 +286,8 @@ class LocalizedCylinderActuatorProcess(KratosMultiphysics.Process):
             return CsvSignalController(settings)
         if controller_type == "fourier_envelope_mpc":
             return FourierEnvelopeMpcController(self.model, settings)
+        if controller_type == "periodic_envelope_feedback":
+            return PeriodicEnvelopeFeedbackController(self.model, settings)
         raise ValueError(f'Unsupported actuator controller_type "{controller_type}".')
 
     def _CalculateDirection(self, dx, dy, direction_type):
